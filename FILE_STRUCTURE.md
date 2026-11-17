@@ -15,14 +15,15 @@ Trailwise_AI_Traveler/
 │   │   └── push-to-github/
 │   │       └── SKILL.md       # exists: Safe stage, commit and push workflow
 │   └── settings.json          # Claude Code permissions and hooks
-├── backend/                   # FastAPI server
+├── backend/                   # FastAPI server (backend/Dockerfile exists: image with backend + mcp_server)
 ├── frontend/                  # React + Vite app
-├── mcp_server/                # exists (weather and web_search tools): Tools the AI agent calls
+├── mcp_server/                # exists (weather, web_search, get_train_details, search_buses and send_trip_email tools): Tools the AI agent calls
 ├── nginx/                     # (to add) Load balancer and HTTPS
 ├── evals/                     # (to add) Test prompts for AI answer quality
 ├── .env                       # Real keys (never commit)
 ├── .env.example               # (to add) Fake placeholder keys, safe to commit
 ├── .gitignore                 # Keeps .env, .venv, node_modules out of Git
+├── .dockerignore              # exists: Keeps secrets, .venv and logs out of the Docker build
 ├── ARCHITECTURE.md            # How the system is built
 ├── CLAUDE.md                  # Always-on rules for Claude Code
 ├── claudeprompts.md           # Saved prompts for Claude Code
@@ -60,7 +61,7 @@ backend/
 │   ├── models/                # Pydantic schemas for requests and responses
 │   └── core/                  # Security, rate limit, logging
 │       └── audit.py           # exists: audit log of agent activity (JSON lines, no secrets or message text)
-├── tests/                     # pytest tests (test_audit.py: exists, audit log tests)
+├── tests/                     # pytest tests (test_audit.py: exists, audit log tests; test_gemini_retry.py: exists, Gemini retry tests; test_model_fallback.py: exists, fallback model tests)
 ├── pytest.ini                 # pytest settings
 ├── requirements.txt           # Python packages
 └── Dockerfile                 # (to add) Container image for the backend
@@ -81,10 +82,10 @@ backend/app/agent/
 ├── mcp_client.py     # exists: McpClient, launches the MCP server over stdio, lists and calls tools
 └── prompts/
     ├── system.md     # exists: main system prompt
-    ├── explore.md
-    ├── route.md
-    ├── itinerary.md
-    └── email.md
+    ├── explore.md    # exists: Explore mode prompt (not loaded by code yet)
+    ├── route.md      # exists: Route mode prompt (not loaded by code yet)
+    ├── itinerary.md  # exists: Itinerary mode prompt (not loaded by code yet)
+    └── email.md      # exists: Email mode prompt (not loaded by code yet)
 ### MCP server (partly built)
 
 ```
@@ -110,19 +111,21 @@ mcp_server/
 ```
 frontend/
 ├── src/
-│   ├── components/            # Chat, Map, Itinerary pieces
-│   ├── pages/                 # Full screens (Home, Login, SavedTrips)
-│   ├── api/                   # Functions that call the backend
-│   ├── hooks/                 # Reusable React logic (streaming, voice)
-│   ├── App.jsx
-│   └── main.jsx
-├── public/
-├── index.html
-├── package.json
-└── .env.example               # Non-secret settings only (like backend URL)
+│   ├── components/            # exists: ChatWindow, MessageList, MessageBubble, ChatInput, VoiceButton, Disclaimer. (to add: MapView, ItineraryView)
+│   ├── pages/                 # exists: Home. Placeholders: Login, SavedTrips ("coming soon", no auth yet)
+│   ├── api/                   # exists: client.js, chat.js (POST /chat)
+│   ├── hooks/                 # exists: useChat, useVoice. (to add: streaming hook, needs SSE in the backend)
+│   ├── App.jsx                # exists
+│   ├── main.jsx               # exists
+│   └── styles.css             # exists (not in the original plan)
+├── public/                    # exists: favicon.svg
+├── index.html                 # exists: the Vite entry page
+├── package.json               # exists (package-lock.json is committed too)
+├── vite.config.js             # exists (not in the original plan): React plugin, dev port 5173
+└── .env.example               # exists: VITE_API_URL, non-secret settings only
 ```
 
-Right now `frontend/` has one file, `index.html`: a plain HTML/CSS/JS chat page that calls `POST /chat` (exists). It will be replaced by the React + Vite layout above when that is set up (`npm create vite@latest frontend -- --template react`).
+The React + Vite app exists and chats through `POST /chat`, with voice input (English, Hindi, Kannada). Run it with `npm install` and `npm run dev` in `frontend/`. The map, the itinerary view and streaming wait for backend pieces that are not built yet.
 
 **Simple rule:** the frontend never holds API keys. It only talks to the backend.
 
