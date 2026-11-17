@@ -7,3 +7,5 @@ node_modules/
 dist/
 logs/
 *.log
+# Zipped copies of the project (can contain a full .venv)
+backend.zip
