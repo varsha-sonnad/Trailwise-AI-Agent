@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 
-from app.agent.agent import AgentError, run_agent
+from app.agent.agent import AgentBusyError, AgentError, run_agent
 from app.models.chat import ChatRequest, ChatResponse
 
 router = APIRouter()
@@ -13,6 +13,13 @@ async def chat(body: ChatRequest) -> ChatResponse:
     """Send the user's message to the Gemini agent and return its reply."""
     try:
         reply = await run_agent(body.message)
+    except AgentBusyError:
+        # 503 = the AI service is overloaded (temporary), even after retries. Retry-After hints when to try again.
+        raise HTTPException(
+            status_code=503,
+            detail="The assistant is busy right now. Please try again in a minute.",
+            headers={"Retry-After": "60"},
+        )
     except AgentError:
         # 502 = the upstream AI service failed. The message is generic so no internals leak.
         raise HTTPException(status_code=502, detail="The assistant is unavailable. Please try again.")

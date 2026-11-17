@@ -3,7 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.agent.agent import AgentError
+from app.agent.agent import AgentBusyError, AgentError
 from app.config import get_settings
 from app.main import app
 
@@ -52,4 +52,17 @@ def test_chat_agent_failure_returns_502(client, monkeypatch):
     monkeypatch.setattr("app.api.chat.run_agent", failing_run_agent)
     r = client.post("/chat", json={"message": "hello"})
     assert r.status_code == 502
+    assert "Gemini" not in r.text
+
+
+def test_chat_overloaded_model_returns_503(client, monkeypatch):
+    """If Gemini is overloaded, the client gets 503 with a 'busy' message and a Retry-After hint."""
+
+    async def busy_run_agent(message):
+        raise AgentBusyError("Gemini request failed", status_code=503)
+
+    monkeypatch.setattr("app.api.chat.run_agent", busy_run_agent)
+    r = client.post("/chat", json={"message": "hello"})
+    assert r.status_code == 503
+    assert "busy" in r.json()["detail"] and r.headers["retry-after"] == "60"
     assert "Gemini" not in r.text

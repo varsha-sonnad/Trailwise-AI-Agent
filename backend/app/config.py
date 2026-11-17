@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     gemini_api_key: str = Field(min_length=1)
     # Which Gemini model the agent uses.
     gemini_model: str = "gemini-3.5-flash"
+    # Optional backup model (env var GEMINI_FALLBACK_MODEL), tried when the main model is still failing
+    # with a server error (500, 503, 504) after its retries. Empty means "no fallback".
+    gemini_fallback_model: str = ""
 
     # MongoDB connection (matches the service in docker-compose.yml).
     # Read from MONGODB_URI (the name used in .env), or MONGO_URL as a fallback.

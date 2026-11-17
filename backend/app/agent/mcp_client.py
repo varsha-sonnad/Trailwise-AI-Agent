@@ -48,7 +48,7 @@ class McpClient:
         try:
             read, write = await self._stack.enter_async_context(stdio_client(params))
             self._session = await self._stack.enter_async_context(ClientSession(read, write))
-            await self._session.initialize()
+            await self._session.initialize() #Perform the actual handshake
         except Exception as exc:
             await self._stack.aclose()  # do not leave a half-started subprocess behind
             raise McpClientError(f"Could not connect to the MCP server: {exc}") from exc
