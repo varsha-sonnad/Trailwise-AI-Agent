@@ -1,0 +1,21 @@
+# Python packages for the Trailwise MCP tool server. Install with: pip install -r requirements.txt
+
+# Official MCP SDK (FastMCP server)
+mcp>=1.2,<2
+
+# Async HTTP client for external API calls
+httpx>=0.27,<1
+
+# Google Gemini API client, used by the web_search tool (Google Search grounding)
+google-genai>=1.0
+
+# Async Redis client for the cache
+redis>=5.0,<6
+
+# Settings loading and argument validation
+pydantic>=2.8,<3
+pydantic-settings>=2.4,<3
+
+# Testing
+pytest>=8.0,<9
+pytest-asyncio>=0.24,<1

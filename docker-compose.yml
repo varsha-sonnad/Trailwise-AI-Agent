@@ -1,0 +1,29 @@
+
+services:
+  mongodb:
+    image: mongo:7
+    container_name: trailwise-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: trailwise
+      MONGO_INITDB_ROOT_PASSWORD: trailwise123
+      MONGO_INITDB_DATABASE: trailwise
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  redis:
+    image: redis:7
+    container_name: trailwise-redis
+    ports:
+      - "6379:6379"
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: trailwise-mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+volumes:
+  mongo_data:
