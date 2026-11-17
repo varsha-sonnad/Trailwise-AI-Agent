@@ -4,8 +4,11 @@
 fastapi>=0.115,<1
 uvicorn[standard]>=0.30,<1
 
-# Settings and data validation
-pydantic>=2.8,<3
+# Settings and data validation ([email] adds the email address checker used by the MCP email tool)
+pydantic[email]>=2.8,<3
+
+# Async SMTP client used by the MCP email tool (the Docker image runs the MCP server with this list)
+aiosmtplib>=3,<6
 pydantic-settings>=2.4,<3
 
 # Google Gemini API client, used by the agent later

@@ -12,8 +12,11 @@ google-genai>=1.0
 # Async Redis client for the cache
 redis>=5.0,<6
 
-# Settings loading and argument validation
-pydantic>=2.8,<3
+# Async SMTP client for the email tool
+aiosmtplib>=3,<6
+
+# Settings loading and argument validation ([email] adds the email address checker)
+pydantic[email]>=2.8,<3
 pydantic-settings>=2.4,<3
 
 # Testing

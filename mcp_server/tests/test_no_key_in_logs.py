@@ -4,11 +4,12 @@
 # real httpx client (with a fake transport, so no network) and checks the captured logs.
 
 import logging
+from datetime import date
 
 import httpx
 
 import server  # noqa: F401  (importing the server applies the logging setup)
-from tools import weather, web_search
+from tools import bus, train_tool, weather, web_search
 
 FAKE_KEY = "SECRET-TEST-KEY-123"
 
@@ -46,6 +47,53 @@ async def test_gemini_key_is_not_logged_by_web_search(monkeypatch, caplog):
     # Neither the logs nor the reply to the agent may contain the key.
     assert FAKE_KEY not in caplog.text
     assert FAKE_KEY not in str(result)
+
+
+async def test_railradar_key_is_not_logged_by_train_tool(monkeypatch, caplog):
+    # A fake RailRadar key, and a real httpx client with a fake transport (no network).
+    monkeypatch.setattr(train_tool.get_settings(), "railradar_api_key", FAKE_KEY)
+    real_client = httpx.AsyncClient
+    body = {"data": {"train": {"number": "12919", "name": "Test"}, "route": []}}
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=body))
+    monkeypatch.setattr(train_tool.httpx, "AsyncClient", lambda **kw: real_client(transport=transport, **kw))
+
+    # Success path, then a failing path (500), both with INFO logging captured.
+    with caplog.at_level(logging.INFO):
+        ok = await train_tool.get_train_details("12919")
+        failing = httpx.MockTransport(lambda request: httpx.Response(500))
+        monkeypatch.setattr(train_tool.httpx, "AsyncClient", lambda **kw: real_client(transport=failing, **kw))
+        failed = await train_tool.get_train_details("12919")
+
+    assert ok["ok"] is True and failed["ok"] is False  # both paths really ran
+    # Neither the logs nor the replies may contain the key.
+    assert FAKE_KEY not in caplog.text
+    assert FAKE_KEY not in str(ok) and FAKE_KEY not in str(failed)
+
+
+async def test_parsebot_key_is_not_logged_by_bus_tool(monkeypatch, caplog):
+    # A fake Parse.bot key, and a real httpx client with a fake transport (no network).
+    monkeypatch.setattr(bus.get_settings(), "parsebot_api_key", FAKE_KEY)
+    monkeypatch.setattr(bus, "_today", lambda: date(2026, 11, 17))
+    real_client = httpx.AsyncClient
+
+    def answer(request):
+        if request.url.path.endswith("/get_city_suggestions"):
+            return httpx.Response(200, json={"status": "success", "data": {"docs": [{"ID": 1, "locationType": "CITY"}]}})
+        return httpx.Response(200, json={"status": "success", "data": {"inventories": [{"travelsName": "X"}]}})
+
+    monkeypatch.setattr(bus.httpx, "AsyncClient", lambda **kw: real_client(transport=httpx.MockTransport(answer), **kw))
+
+    # Success path, then a failing path (500), both with INFO logging captured.
+    with caplog.at_level(logging.INFO):
+        ok = await bus.search_buses("Bangalore", "Goa", "2026-11-20")
+        failing = httpx.MockTransport(lambda request: httpx.Response(500))
+        monkeypatch.setattr(bus.httpx, "AsyncClient", lambda **kw: real_client(transport=failing, **kw))
+        failed = await bus.search_buses("Bangalore", "Goa", "2026-11-20")
+
+    assert ok["ok"] is True and failed["ok"] is False  # both paths really ran
+    # Neither the logs nor the replies may contain the key.
+    assert FAKE_KEY not in caplog.text
+    assert FAKE_KEY not in str(ok) and FAKE_KEY not in str(failed)
 
 
 def test_http_loggers_are_quiet():
