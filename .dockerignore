@@ -1,0 +1,33 @@
+# .dockerignore: keeps secrets, virtual environments and unneeded files out of the Docker build.
+# It sits at the project root because that is the build context (see backend/Dockerfile).
+
+# Secrets: the real .env is mounted at run time, never copied into the image.
+.env
+.env*
+**/.env
+
+# Git history and Claude Code setup.
+.git
+.claude
+
+# Local virtual environments (about 264 MB) and Python caches.
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+
+# Logs (the audit log is created inside the container).
+**/logs
+*.log
+
+# Zip copies of the project.
+*.zip
+
+# Root-level docs only. Do NOT use "*.md" everywhere: backend/app/agent/prompts/system.md is needed at run time.
+/*.md
+
+# Parts that are not part of the backend image.
+frontend
+docker-compose.yml
+test_api.py
+node_modules
