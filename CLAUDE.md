@@ -53,3 +53,17 @@ Conventions:
 8. Log prompts: after each prompt, add an entry to `claudeprompts.md` (date, prompt as typed, outcome) and update its decisions section when a decision changes.
 9. Comment the code: add short comments to all generated code. Give each file a header comment saying what it does, and add a comment on every function, class and non-obvious line of logic.
 10. Whenever you create a file or folder, update the project structure in `README.md` with its name and purpose.
+
+## Git Safety Rules
+
+The `push-to-github` skill has the step-by-step workflow. These rules always apply.
+
+11. Stage, commit and push only after my explicit approval, and only when I ask. Approval to commit is not approval to push.
+12. Before committing or pushing, run `git status` and `git diff`, and check the current branch and the `origin` URL.
+13. Never push to `main` without separate, explicit approval. Work on a feature branch.
+14. Never force-push (`--force`, `--force-with-lease`), and never amend or rewrite commits that are already pushed.
+15. Never commit secrets: `.env`, API keys, tokens, credentials, logs. Only `.env.example` with fake values is allowed.
+16. Stage files by name. Never use `git add -A`, `git add .` or `git commit -a`.
+17. Never skip checks or hooks (`--no-verify`). Run the tests before pushing and stop if they fail.
+18. Never run destructive commands (`git reset --hard`, `git clean -f`, `git checkout .`, `git branch -D`, `git stash drop`) without asking first.
+19. Create pull requests only when I ask.

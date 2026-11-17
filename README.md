@@ -46,8 +46,10 @@ Trailwise_AI_Traveler/
 ├── .claude/              Claude Code project setup
 │   ├── settings.json     Permissions, blocked commands and the .env write-protection hook
 │   └── skills/
-│       └── add-agent-tool/
-│           └── SKILL.md  Step-by-step workflow for adding an agent tool
+│       ├── add-agent-tool/
+│       │   └── SKILL.md  Step-by-step workflow for adding an agent tool
+│       └── push-to-github/
+│           └── SKILL.md  Safe stage, commit and push workflow (approval at each step)
 ├── frontend/             Web page
 │   └── index.html        Chat page (plain HTML, CSS and JS) that calls POST /chat
 ├── mcp_server/           MCP tool server (separate service, own .venv)
@@ -103,6 +105,7 @@ Trailwise_AI_Traveler/
 | `.env.example` | Template of the settings the backend needs, with fake values. Copy it to `.env` in the project root and add your Gemini API key. |
 | `.claude/settings.json` | Project-level Claude Code settings: allowed commands (pytest, uvicorn, docker compose, read-only git), denied ones (rm -rf, force push, reading or editing `.env`) and a hook that blocks writes to `.env` files. |
 | `.claude/skills/add-agent-tool/SKILL.md` | Workflow Claude Code follows when adding an agent tool: async, cache first, validated arguments, transport disclaimer, tests, comments and doc updates. |
+| `.claude/skills/push-to-github/SKILL.md` | Workflow Claude Code follows to push to GitHub: verify the `origin` URL and branch, scan for secrets, run tests, then stage, commit and push only after your explicit approval. Pull requests only when asked. Works with the Git Safety Rules in `CLAUDE.md`. |
 | `.gitignore` | Stops `.env`, virtual environments, caches, build output and `logs/` (audit log) from being committed. |
 | `frontend/index.html` | The chat page: a message box and conversation view that sends `POST http://localhost:8000/chat` and shows the reply or a clear error. No build step; serve it with `python -m http.server 5173` from `frontend/` and open http://localhost:5173. |
 | `backend/` | The FastAPI server. The agent and its tools will be added here. |

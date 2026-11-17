@@ -12,6 +12,8 @@ Trailwise_AI_Traveler/
 │   ├── skills/
 │   │   └── add-agent-tool/
 │   │       └── SKILL.md       # Playbook for adding a new agent tool
+│   │   └── push-to-github/
+│   │       └── SKILL.md       # exists: Safe stage, commit and push workflow
 │   └── settings.json          # Claude Code permissions and hooks
 ├── backend/                   # FastAPI server
 ├── frontend/                  # React + Vite app

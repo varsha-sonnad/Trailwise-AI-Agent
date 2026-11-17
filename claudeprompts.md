@@ -140,6 +140,10 @@ Entry format: date, the prompt (as typed), and the outcome.
 **Prompt:** Create an audit logging system to record agent activity, including user requests, Gemini tool-selection decisions, MCP tool calls, execution status, timestamps, and errors. Follow the existing project structure and security practices; never log API keys, secrets, or sensitive data. (then: "approve")
 **Outcome:** Proposed first, then created `backend/app/core/audit.py` (JSON lines to a rotating `backend/logs/audit.log`, per-request ID via `contextvars`, sanitiser that drops secret-named fields and redacts key-like values and the real Gemini key, never raises) and `backend/tests/test_audit.py` (9 tests). Edited `backend/app/agent/agent.py` (events: `request_received`, `mcp_discovery`, `model_decision`, `tool_call`, `request_completed`/`request_failed`, with durations; errors by type only), `backend/app/config.py` (`audit_log_enabled`, `audit_log_path`), `backend/tests/conftest.py` (audit off by default in tests), `.gitignore` (`logs/`, `*.log`), `README.md` and `FILE_STRUCTURE.md`. Message text, tool arguments and replies are not logged. 26 backend tests pass.
 
+### 34. Git push skill and safety rules
+**Prompt:** Create a skill at .claude/skills/push-to-github/SKILL.md for my git push workflow and add some Git Safety Rules in claude.md (then: The Git skill should stage, commit, and push only after my explicit approval. Use `origin` by default, but verify the remote URL and current branch first. Keep PR creation optional and do it only when requested. Always follow the Git safety rules in CLAUDE.md.)
+**Outcome:** Proposed first, then created `.claude/skills/push-to-github/SKILL.md` (inspect, verify `origin` and branch, secret scan, tests, approval to stage and commit, separate approval to push, optional PR only on request). Added "Git Safety Rules" (rules 11 to 19) to `CLAUDE.md`. Updated `README.md` and `FILE_STRUCTURE.md`. Nothing was committed or pushed.
+
 ---
 
 ## Decisions so far
@@ -156,4 +160,5 @@ Entry format: date, the prompt (as typed), and the outcome.
 - MCP server: separate `mcp_server/` service with its own venv, stdio transport, reads the root `.env`. Weather tool built 2026-11-15; Redis outage falls back to no cache.
 - Web search: an MCP tool (`mcp_server/tools/web_search.py`), not agent code. Gemini with Google Search grounding, 1 hour Redis cache, model set by `GEMINI_SEARCH_MODEL`. Built 2026-11-16; grounding returns 429 on the current key, so it reports "unavailable" until quota or model changes.
 - Agent tools: one MCP connection per request, tool loop capped at 5 rounds, falls back to no tools if the MCP server is unavailable.
+- Git: stage, commit and push only after explicit approval (push approved separately); `origin` by default, verify URL and branch first; no force-push, no pushing to `main` without approval; PRs only when asked. Skill `push-to-github`, rules 11 to 19 in `CLAUDE.md`. Added 2026-11-17.
 - Audit log: `backend/app/core/audit.py` writes JSON lines to `backend/logs/audit.log`. It logs lengths, a short hash, tool names and argument names only, never message text, arguments, replies or secrets. Added 2026-11-16.
