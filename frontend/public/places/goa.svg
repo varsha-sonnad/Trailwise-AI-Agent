@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 180" preserveAspectRatio="xMidYMid slice">
+<!-- Placeholder illustration for goa: replace with a real photo later (see src/data/places.js). -->
+<defs>
+<linearGradient id="sky-goa" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#ff9a6e" />
+<stop offset="0.6" stop-color="#ffd37a" />
+<stop offset="1" stop-color="#ffe8c8" />
+</linearGradient>
+</defs>
+<rect width="300" height="180" fill="url(#sky-goa)" />
+<circle cx="210" cy="100" r="30" fill="#fff3c4" />
+<path d="M0 110 H300 V180 H0Z" fill="#2f7fa8" />
+<path d="M0 128 Q25 120 50 128 T100 128 T150 128 T200 128 T250 128 T300 128 V180 H0Z" fill="#256c92" />
+<path d="M0 150 Q25 142 50 150 T100 150 T150 150 T200 150 T250 150 T300 150 V180 H0Z" fill="#1c5a7d" />
+<path d="M60 180 Q64 130 70 95" stroke="#3a2a1a" stroke-width="5" fill="none" stroke-linecap="round" />
+<path d="M70 95 Q50 80 35 92 M70 95 Q85 74 104 84 M70 95 Q66 72 52 66 M70 95 Q90 92 100 108" stroke="#2c6b3a" stroke-width="5" fill="none" stroke-linecap="round" />
+</svg>

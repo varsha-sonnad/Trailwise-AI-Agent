@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 180" preserveAspectRatio="xMidYMid slice">
+<!-- Placeholder illustration for kerala: replace with a real photo later (see src/data/places.js). -->
+<defs>
+<linearGradient id="sky-kerala" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#bfe6d8" />
+<stop offset="1" stop-color="#f3f8e4" />
+</linearGradient>
+</defs>
+<rect width="300" height="180" fill="url(#sky-kerala)" />
+<path d="M0 105 H300 V180 H0Z" fill="#3f9a8a" />
+<path d="M0 118 Q40 110 80 118 T160 118 T240 118 T300 118 V180 H0Z" fill="#33887a" />
+<path d="M0 100 Q40 80 90 100 T190 100 T300 96 V108 H0Z" fill="#4c9a4a" />
+<path d="M95 150 Q150 170 205 150 L195 142 H105Z" fill="#7a4a2a" />
+<path d="M120 142 V116 H180 V142Z" fill="#e8c27a" />
+<path d="M114 116 H186 L150 100Z" fill="#b8782f" />
+<path d="M255 110 Q258 70 262 50 M262 50 Q244 40 232 52 M262 50 Q280 40 292 54 M262 50 Q258 34 246 30" stroke="#2c6b3a" stroke-width="4" fill="none" stroke-linecap="round" />
+</svg>

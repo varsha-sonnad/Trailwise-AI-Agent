@@ -5,6 +5,13 @@
 // Where the backend runs. Set VITE_API_URL in frontend/.env.local to change it (see .env.example).
 export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
+// Supplies the auth headers for every call (a Keycloak Bearer token, or a guest session id).
+// auth/session.js registers the real one; until then no extra headers are sent.
+let authHeaders = async () => ({});
+export function setAuthHeaderProvider(provider) {
+  authHeaders = provider;
+}
+
 // An error from the backend or the network. status is the HTTP status, or 0 when the server was unreachable.
 export class ApiError extends Error {
   constructor(status, message) {
@@ -21,7 +28,7 @@ export async function postJson(path, body, describeError) {
   try {
     response = await fetch(`${API_URL}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
       body: JSON.stringify(body),
     });
   } catch {

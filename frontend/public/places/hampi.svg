@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 180" preserveAspectRatio="xMidYMid slice">
+<!-- Placeholder illustration for hampi: replace with a real photo later (see src/data/places.js). -->
+<defs>
+<linearGradient id="sky-hampi" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#f2b56a" />
+<stop offset="1" stop-color="#fbe3b8" />
+</linearGradient>
+</defs>
+<rect width="300" height="180" fill="url(#sky-hampi)" />
+<circle cx="235" cy="58" r="22" fill="#fff3c4" />
+<path d="M0 150 H300 V180 H0Z" fill="#9a7048" />
+<ellipse cx="60" cy="140" rx="46" ry="30" fill="#b98a5a" />
+<ellipse cx="120" cy="146" rx="38" ry="24" fill="#a77a4e" />
+<ellipse cx="45" cy="120" rx="26" ry="20" fill="#c79a68" />
+<path d="M170 150 V96 H250 V150Z" fill="#b8814f" />
+<path d="M178 96 V80 H242 V96 M188 80 V66 H232 V80 M198 66 V54 H222 V66 M208 54 V44 H212 V54" fill="#c9915c" stroke="#8f6238" stroke-width="2" />
+<path d="M200 150 V118 H220 V150Z" fill="#5d3b22" />
+</svg>

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 180" preserveAspectRatio="xMidYMid slice">
+<!-- Placeholder illustration for varanasi: replace with a real photo later (see src/data/places.js). -->
+<defs>
+<linearGradient id="sky-varanasi" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#5a4a9a" />
+<stop offset="0.6" stop-color="#e98a6c" />
+<stop offset="1" stop-color="#ffd08a" />
+</linearGradient>
+</defs>
+<rect width="300" height="180" fill="url(#sky-varanasi)" />
+<circle cx="80" cy="82" r="22" fill="#ffe6a8" />
+<path d="M0 150 H300 V180 H0Z" fill="#3b4f8a" />
+<path d="M0 120 H300 V150 H0Z" fill="#8a5a4a" />
+<path d="M0 130 H300 M0 140 H300" stroke="#6e4538" stroke-width="3" />
+<path d="M150 120 V84 H210 V120Z" fill="#a8644f" />
+<path d="M156 84 Q180 40 204 84Z" fill="#c47a5c" />
+<path d="M180 40 V28" stroke="#c47a5c" stroke-width="3" />
+<path d="M215 120 V96 H255 V120Z" fill="#935544" />
+<path d="M220 96 Q235 66 250 96Z" fill="#b66e56" />
+</svg>

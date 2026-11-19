@@ -7,6 +7,8 @@ from mcp.server.fastmcp import FastMCP
 
 from tools.bus import search_buses
 from tools.email_tool import send_trip_email
+from tools.geocode_tool import geocode_places
+from tools.routes_tool import get_route
 from tools.train_tool import get_train_details
 from tools.weather import get_weather
 from tools.web_search import web_search
@@ -74,6 +76,34 @@ mcp.tool(
         "them, then pass confirmed=true. Never pass confirmed=true on your own."
     ),
 )(send_trip_email)
+
+# Register the geocoding tool (Nominatim / OpenStreetMap). Coordinates come only from the service and are cached
+# for 30 days; the tool never invents them. An entry with error "unavailable" means the lookup failed, not that
+# the place does not exist.
+mcp.tool(
+    name="geocode_places",
+    description=(
+        "Find coordinates for up to 12 place names in India (for a map). Arguments: names (a list of place names, "
+        "e.g. ['Haridwar', 'Rishikesh']) and context (a region such as 'Uttarakhand, India' that narrows the search). "
+        "Returns one entry per name: {name, lat, lng, found}. found=false means no match was found. An entry with "
+        "error 'unavailable' means the lookup failed: tell the user to retry later and never claim the place does "
+        "not exist. Never invent coordinates."
+    ),
+)(geocode_places)
+
+# Register the route tool (OSRM / OpenStreetMap, driving only). It returns the road route as [lat, lng] points for a
+# map, with no distances, durations or prices, and the route is indicative (verify before travel). An unavailable
+# service says nothing about whether a road route exists.
+mcp.tool(
+    name="get_route",
+    description=(
+        "Get the driving route through 2 to 10 points as map points. Arguments: points (an ordered list of "
+        "[lat, lng] pairs, e.g. [[29.9457, 78.1642], [30.0869, 78.2676]]) and mode (only 'driving'). Returns "
+        "route: a list of [lat, lng] points to draw on a map. It has no distances, travel times or prices: never "
+        "state any from it. found=false means no route. With error 'unavailable' the lookup failed: tell the user "
+        "to retry later and never claim there is no road route. The route is indicative: verify before travel."
+    ),
+)(get_route)
 
 if __name__ == "__main__":
     # stdio transport: the client talks to this process over stdin/stdout.

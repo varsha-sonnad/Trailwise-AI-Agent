@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 180" preserveAspectRatio="xMidYMid slice">
+<!-- Placeholder illustration for ladakh: replace with a real photo later (see src/data/places.js). -->
+<defs>
+<linearGradient id="sky-ladakh" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#4f8fd6" />
+<stop offset="1" stop-color="#cfe6f7" />
+</linearGradient>
+</defs>
+<rect width="300" height="180" fill="url(#sky-ladakh)" />
+<path d="M0 140 L70 60 L110 100 L170 30 L240 110 L300 70 V180 H0Z" fill="#7d8aa0" />
+<path d="M170 30 L150 58 L165 52 L172 64 L184 50 L200 64Z M70 60 L55 80 L68 74 L76 84 L90 76Z" fill="#ffffff" />
+<path d="M0 150 Q80 120 160 148 T300 140 V180 H0Z" fill="#b08a62" />
+<path d="M0 168 Q90 148 170 166 T300 160 V180 H0Z" fill="#8f6c48" />
+<path d="M205 150 V128 H235 V150Z" fill="#f3ead8" />
+<path d="M205 128 H235 L220 116Z" fill="#c0463a" />
+</svg>

@@ -61,7 +61,7 @@ Dependency direction (no upward imports): `core` ← `cache` / `auth` ← `servi
 | Module | Owns | Must not |
 |---|---|---|
 | `core` | Settings (Pydantic BaseSettings, fails at startup if a key is missing), request ID, shared errors, clock | contain business rules |
-| `auth` | Users, password hashing, JWT and refresh cookies, guest `session_id`, ownership checks | call the agent |
+| `auth` | Verifies the Keycloak access token (PyJWT, cached public keys), maps the token's `sub` to a user record, guest `session_id`, ownership checks. No passwords or token issuing: Keycloak does that | call the agent |
 | `cache` | Redis helpers, key naming, TTL per data type, stampede lock | know about travel logic |
 | `ratelimit` | slowapi setup (Redis backend), per-user and per-IP limits, global daily AI spend cap | block cached reads that cost nothing |
 | `services` | One async client per external provider: weather, images, routes, places, geocoding, transport, email | talk to the agent or the database directly |
@@ -71,7 +71,7 @@ Dependency direction (no upward imports): `core` ← `cache` / `auth` ← `servi
 | `trips` | Saved trips, explore history, export and delete my data | call external APIs |
 | `observability` | JSON logs, Sentry, Prometheus metrics | log secrets or message contents unnecessarily |
 
-`agent` talks to the outside world only through `tools`. `tools` call `services`, and `services` always check `cache` first. Only three modules write to MongoDB, each to its own collections: `auth` (`users`, `refresh_tokens`), `chat` (`ChatHistory`) and `trips` (`TripsHistory`, `ExploreHistory`). `agent`, `tools` and `services` never touch the database.
+`agent` talks to the outside world only through `tools`. `tools` call `services`, and `services` always check `cache` first. Only three modules write to MongoDB, each to its own collections: `auth` (`users`, keyed by the Keycloak `sub`), `chat` (`ChatHistory`) and `trips` (`TripsHistory`, `ExploreHistory`). `agent`, `tools` and `services` never touch the database.
 
 ## 3. Data flow, message to saved trip
 
@@ -136,9 +136,9 @@ Read it top to bottom: each arrow is one step, in order. Solid arrows are reques
 ## 4. API communication
 
 - REST + JSON for all endpoints, SSE for streamed chat replies. FastAPI generates the OpenAPI schema; the endpoint list and the request, response and error formats are fixed in Phase 0 (`plan.md` section 16).
-- Starting endpoint set (planned): `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`; `POST /chat` (streaming); `GET /chats`, `GET /chats/{id}`; `GET /trips`, `GET /trips/{id}`, `DELETE /trips/{id}`; `GET /explore/history`; `POST /trips/{id}/email`; `GET /me/export`, `DELETE /me`; `GET /health`, `GET /ready`.
+- Starting endpoint set (planned): `GET /me` (the signed-in user from the token); `POST /chat` (streaming); `GET /chats`, `GET /chats/{id}`; `GET /trips`, `GET /trips/{id}`, `DELETE /trips/{id}`; `GET /explore/history`; `POST /trips/{id}/email`; `GET /me/export`, `DELETE /me`; `GET /health`, `GET /ready`.
 - One error shape for everything: `{ "error": { "code", "message", "request_id" } }`. Rate limits return HTTP 429; the frontend shows a friendly message.
-- Auth: registered users get a short-lived JWT (15 to 30 minutes) plus a refresh token, both in httpOnly, Secure, SameSite cookies, never in localStorage. Guests get a `session_id` made with `secrets.token_urlsafe(32)`. Passwords use argon2 or bcrypt.
+- Auth (Keycloak, decided 2026-11-18): Keycloak runs as its own container and handles sign-up, login, passwords, email verification and token issuing (OpenID Connect, Authorization Code with PKCE). The frontend uses `keycloak-js` and sends the access token as `Authorization: Bearer`; it keeps the token in memory only, never in localStorage. The backend verifies the token with PyJWT (signature, issuer, audience, expiry) using Keycloak's public keys, fetched with async `httpx` and cached in Redis. Guests skip Keycloak and send a random `X-Session-Id` (32 random bytes, URL-safe; created in the browser and kept in `sessionStorage` until the backend stores guest chats, when it should issue them with `secrets.token_urlsafe(32)`). Built so far: the Keycloak container and realm file, `core/auth.py` (token check), `GET /me`, and the login pop-up. Not built: the `users` collection, chat history keyed by user or session, and a rate limit. Keycloak has its own internal store, separate from MongoDB.
 - Authorization: every trip and chat endpoint checks that the record's owner equals the current user or session.
 - CORS is limited to the frontend domain. In production the frontend and API sit behind Nginx on one domain so the cookie is first-party.
 

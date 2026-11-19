@@ -1,17 +1,5 @@
 
 services:
-  mongodb:
-    image: mongo:7
-    container_name: trailwise-mongodb
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: trailwise
-      MONGO_INITDB_ROOT_PASSWORD: trailwise123
-      MONGO_INITDB_DATABASE: trailwise
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
-
   redis:
     image: redis:7
     container_name: trailwise-redis
@@ -25,6 +13,32 @@ services:
       - "1025:1025"
       - "8025:8025"
 
+  # Keycloak: sign-up, login, passwords and tokens (OpenID Connect). Dev mode, local testing only.
+  # The "trailwise" realm and the "trailwise-web" client are imported from keycloak/trailwise-realm.json on
+  # first start. The admin password comes from KEYCLOAK_ADMIN_PASSWORD in the project-root .env (compose reads
+  # it automatically); with no password Keycloak refuses to start, the other services are not affected.
+  # Admin console: http://localhost:8080. Data lives in the keycloak_data volume (Keycloak's own embedded store;
+  # a real deployment needs a supported database for it).
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: trailwise-keycloak
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-}
+      # The address the browser uses; it ends up in every token as the issuer.
+      KC_HOSTNAME: http://localhost:8080
+    ports:
+      - "8080:8080"
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+      - ./keycloak/trailwise-realm.json:/opt/keycloak/data/import/trailwise-realm.json:ro
+      # The Trailwise login theme (sunset page, rounded card, orange buttons). Choose it in the admin console:
+      # Realm settings > Themes > Login theme > trailwise. Dev mode re-reads theme files, no restart needed.
+      - ./keycloak/themes:/opt/keycloak/themes:ro
+    depends_on:
+      - mailpit
+
   # The Trailwise backend. It also runs the STDIO MCP server as a subprocess, in the same container.
   # The real .env is mounted read-only at /app/.env, the spot both config files already read,
   # so the API keys reach the backend and the MCP subprocess without being copied into the image.
@@ -37,6 +51,28 @@ services:
       - "8000:8000"
     volumes:
       - ./.env:/app/.env:ro
+    environment:
+      # Inside Docker the backend reaches Keycloak by its service name to fetch the public keys.
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+
+  # The Trailwise frontend: the React app built once and served by nginx (non-root, port 8080 inside).
+  # Open http://localhost:5173, the one address the backend's CORS allows. Your browser calls the backend
+  # directly at VITE_API_URL (the port published above); that value is baked in at build time, so changing
+  # it needs: docker compose build frontend. Do not run "npm run dev" at the same time: both use port 5173.
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:8000
+        # Non-secret Keycloak settings the browser needs (baked in at build time).
+        VITE_KEYCLOAK_URL: http://localhost:8080
+        VITE_KEYCLOAK_REALM: trailwise
+        VITE_KEYCLOAK_CLIENT_ID: trailwise-web
+    container_name: trailwise-frontend
+    ports:
+      - "5173:8080"
+    depends_on:
+      - backend
 
 volumes:
-  mongo_data:
+  keycloak_data:

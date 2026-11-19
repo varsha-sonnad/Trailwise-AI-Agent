@@ -1,4 +1,4 @@
-# config.py: loads the MCP server's settings (weather, Gemini, RailRadar and Parse.bot keys, SMTP settings, Redis URL) from the project-root .env.
+# config.py: loads the MCP server's settings (weather, Gemini, RailRadar and Parse.bot keys, SMTP settings, geocoding and routing services, Redis URL) from the project-root .env.
 # The MCP server is a separate service, so it has its own small settings class
 # instead of importing backend/app/config.py.
 
@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     # Parse.bot API key (env var PARSEBOT_API_KEY) for the bus tool.
     # Empty means "not configured": the tool returns an error object instead of crashing.
     parsebot_api_key: str = ""
-    # The email account the tool sends from (env var SMTP_EMAIL, as in .env_example). It is the "From"
+    # The email account the tool sends from (env var SMTP_EMAIL, as in .env.example). It is the "From"
     # address and, when a password is set, the SMTP login name. Empty means "not configured".
     smtp_email: str = ""
     # That account's SMTP password (env var SMTP_PASSWORD). Empty = no login (fine for Mailpit). Never logged.
@@ -46,6 +46,15 @@ class Settings(BaseSettings):
     # Optional: the ONE address the email tool sends to (env var VERIFIED_RECIPIENT). Empty means it sends
     # to smtp_email itself. There is no login yet, so this stands in for the user's verified address.
     verified_recipient: str = ""
+    # The geocoding service for the geocode_places tool (a Nominatim-style API), and the User-Agent it requires
+    # (env vars GEOCODE_BASE_URL and GEOCODE_USER_AGENT). The User-Agent must identify this app and give a contact.
+    # Either one empty means "not configured": the tool returns an error object instead of crashing.
+    geocode_base_url: str = ""
+    geocode_user_agent: str = ""
+    # The routing service for the get_route tool (an OSRM-style API, env var ROUTING_BASE_URL), for example
+    # https://router.project-osrm.org (a public demo server for light use). Empty means "not configured":
+    # the tool returns an error object instead of crashing.
+    routing_base_url: str = ""
     # Redis used as the cache (matches docker-compose.yml).
     redis_url: str = "redis://localhost:6379/0"
 

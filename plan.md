@@ -56,7 +56,7 @@ Trailwise puts everything in **one chat**. The user types something like *"Plan 
 | Transport data | **To be decided (see Section 10)** | Trains, buses, flights need a real data source |
 | Email | **To be decided** (SendGrid, SES, etc.) | Sending trip plans |
 | Voice | Browser Speech APIs | Built in, no extra cost (uneven support, see Section 16) |
-| Authentication | JWT (httpOnly cookies) + guest session_id | Keeps each user's or guest's chat separate |
+| Authentication | Keycloak (OIDC login; `keycloak-js` in the frontend, PyJWT token check in the backend) + guest session_id (changed 2026-11-18, replaces our own JWT cookies) | Keeps each user's or guest's chat separate |
 | Config / secrets | Pydantic BaseSettings + secrets manager | Safe handling of keys |
 | Validation | Pydantic models + structured outputs | Reject bad input and bad AI output |
 | Rate limiting | slowapi (Redis backend) | Stops overuse of the app and APIs |
@@ -171,7 +171,7 @@ React shows text, itinerary, images, and map
 | Phase | What to do |
 |---|---|
 | **0. Pre-implementation** | Close the decisions and gaps in Sections 10 to 17 (transport source, data model, API spec, secrets, security basics) |
-| **1. Foundation** | Remove in-memory chat, make code async, store chats in MongoDB, add guest `session_id` and JWT login, add Pydantic validation and config loading |
+| **1. Foundation** | Remove in-memory chat, make code async, store chats in MongoDB, add guest `session_id` and Keycloak login (token check in the backend), add Pydantic validation and config loading |
 | **2. Speed and cost** | Add Redis, cache weather, images, and places, move guest chats to Redis with TTL, limit history sent to the model |
 | **3. Protection** | Add rate limiting (Redis backed), timeouts, retries, circuit breakers, fallback messages, cap tool calls per request, prompt-injection defenses |
 | **4. Experience** | Stream replies (SSE), show loading states |
@@ -228,8 +228,8 @@ Sections 10 to 17 were added after reviewing this plan for gaps. Each has step-b
 **Missing before:** password hashing, token lifetime and storage, CORS, HTTPS, authorization checks, prompt injection, email abuse, internal-service protection, privacy.
 
 **Steps:**
-1. Hash passwords with argon2 or bcrypt. Add email verification and password reset.
-2. Set a short JWT expiry (15 to 30 minutes) plus a refresh token. Store tokens in httpOnly, Secure, SameSite cookies, not localStorage.
+1. Keycloak owns passwords, email verification and password reset (change 2026-11-18); the backend never sees or stores a password.
+2. Keycloak issues short-lived access tokens (about 5 to 15 minutes) with refresh handled by `keycloak-js`. The browser keeps the token in memory only, never in localStorage. The backend verifies the signature, issuer, audience and expiry with PyJWT against Keycloak's public keys.
 3. Generate guest `session_id` with `secrets.token_urlsafe(32)` or a UUIDv4. Never use sequential or guessable IDs.
 4. On every trip and chat endpoint, check that the record's owner equals the current user or session.
 5. Restrict CORS to your own frontend domain. Add security headers in Nginx (HSTS, X-Content-Type-Options, CSP).
@@ -246,7 +246,7 @@ Sections 10 to 17 were added after reviewing this plan for gaps. Each has step-b
 
 ## 12. API Keys and Secrets
 
-**Keys needed:** Gemini, OpenWeatherMap, Pexels, transport provider, email provider, JWT secret, database credentials.
+**Keys needed:** Gemini, OpenWeatherMap, Pexels, transport provider, email provider, Keycloak admin and client settings, database credentials.
 
 **Steps:**
 1. Keep all keys in `.env` locally. Add `.env` to `.gitignore` and commit a `.env.example` with fake values.

@@ -14,12 +14,15 @@ pydantic-settings>=2.4,<3
 # Google Gemini API client, used by the agent later
 google-genai>=1.0
 
-# Async database clients: MongoDB and Redis
-motor>=3.6,<4
+# Async database clients: MongoDB (PyMongo's AsyncMongoClient; [srv] adds DNS support for Atlas mongodb+srv:// links) and Redis
+pymongo[srv]>=4.13,<5
 redis>=5.0,<6
 
 # HTTP client (used by tests and by external API calls later)
 httpx>=0.27,<1
+
+# Verifies Keycloak access tokens (the [crypto] extra adds RSA signature support)
+pyjwt[crypto]>=2.8,<3
 
 # Testing
 pytest>=8.0,<9

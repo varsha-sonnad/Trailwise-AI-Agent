@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 180" preserveAspectRatio="xMidYMid slice">
+<!-- Placeholder illustration for jaipur: replace with a real photo later (see src/data/places.js). -->
+<defs>
+<linearGradient id="sky-jaipur" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#f6a6a0" />
+<stop offset="1" stop-color="#ffe1cf" />
+</linearGradient>
+</defs>
+<rect width="300" height="180" fill="url(#sky-jaipur)" />
+<path d="M0 150 H300 V180 H0Z" fill="#c9766a" />
+<path d="M40 150 V92 H260 V150Z" fill="#d9776b" />
+<path d="M40 92 V80 H60 V92 M90 92 V74 H110 V92 M140 92 V62 H160 V92 M190 92 V74 H210 V92 M240 92 V80 H260 V92" fill="#c3604f" />
+<path d="M130 62 Q150 30 170 62Z M80 74 Q100 52 120 74Z M180 74 Q200 52 220 74Z" fill="#e9967f" />
+<path d="M135 150 V118 Q150 100 165 118 V150Z" fill="#7a2f2a" />
+<path d="M62 150 V120 Q72 108 82 120 V150Z M218 150 V120 Q228 108 238 120 V150Z" fill="#9a423a" />
+</svg>

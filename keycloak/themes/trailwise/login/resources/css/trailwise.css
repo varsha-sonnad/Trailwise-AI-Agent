@@ -1,0 +1,112 @@
+/* trailwise.css: makes Keycloak's login, register and password pages match the Trailwise home page.
+   The values are copied from frontend/src/styles.css: the sunset gradient, the system font stack, a rounded
+   white card, rounded inputs, and orange pill buttons. The page is always light (the Trailwise hero is too),
+   so the card colors are fixed here instead of following the browser's dark mode. */
+
+/* ---- Colors and font (same names and values as the frontend variables) ---- */
+html.login-pf {
+  --tw-text: #2b1a12;
+  --tw-muted: #7a5f52;
+  --tw-border: #ecd9cc;
+  --tw-bg: #fff8f1;
+  --tw-accent: #c2410c;
+  --tw-accent-hover: #9a3412;
+  --tw-error: #b42318;
+  --tw-sunset: linear-gradient(180deg, #ffe8c8 0%, #ffc58a 38%, #ff9a6e 68%, #e8604f 100%);
+  color-scheme: light;
+  /* Keycloak (PatternFly) reads these two variables for every piece of text. */
+  --pf-v5-global--FontFamily--text: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --pf-v5-global--FontFamily--heading: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --pf-v5-global--link--Color: var(--tw-accent);
+  --pf-v5-global--link--Color--hover: var(--tw-accent-hover);
+  --pf-v5-global--danger-color--100: var(--tw-error);
+}
+
+/* ---- Page background: the sunset sky with a low sun, like the home hero ---- */
+html.login-pf body {
+  min-height: 100vh;
+  margin: 0;
+  color: var(--tw-text);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: radial-gradient(circle at 50% 85%, #fff3c4 0, #ffd37a 9%, rgba(255, 160, 90, 0) 38%), var(--tw-sunset) no-repeat center / cover fixed;
+}
+html.login-pf .pf-v5-c-login { background: transparent; min-height: 100vh; }
+html.login-pf .pf-v5-c-login__container { padding-top: 24px; padding-bottom: 24px; }
+
+/* ---- Brand name above the card (was white, uppercase, spaced out) ---- */
+html.login-pf #kc-header-wrapper {
+  color: #3a1d12 !important;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+}
+html.login-pf #kc-header-wrapper::before { content: "\2600\00a0"; } /* the sun mark used in the Trailwise nav */
+
+/* ---- The white rounded card ---- */
+html.login-pf .pf-v5-c-login__main {
+  border-radius: 24px;
+  background: #ffffff;
+  color: var(--tw-text);
+  box-shadow: 0 20px 60px rgba(120, 40, 20, 0.3);
+  overflow: hidden;
+}
+html.login-pf .pf-v5-c-login__main-header { padding-bottom: 0; }
+html.login-pf #kc-page-title { color: var(--tw-text); font-weight: 700; }
+html.login-pf .pf-v5-c-form__label-text,
+html.login-pf .pf-v5-c-form__label { color: var(--tw-text); font-weight: 600; }
+html.login-pf .pf-v5-c-form__label-required { color: var(--tw-accent); }
+html.login-pf .pf-v5-c-helper-text__item-text { color: var(--tw-muted); }
+
+/* ---- Rounded inputs (same look as the Trailwise login pop-up) ---- */
+html.login-pf span.pf-v5-c-form-control {
+  background: var(--tw-bg);
+  border-radius: 999px;
+}
+html.login-pf .pf-v5-c-form-control::before { border: 1px solid var(--tw-border); border-radius: 999px; }
+html.login-pf .pf-v5-c-form-control::after { display: none; } /* the thin underline PatternFly adds */
+html.login-pf .pf-v5-c-form-control:focus-within::before { border: 2px solid var(--tw-accent); }
+html.login-pf .pf-v5-c-form-control > input,
+html.login-pf span.pf-v5-c-form-control input {
+  padding: 12px 18px;
+  color: var(--tw-text);
+  background: transparent;
+}
+html.login-pf .pf-v5-c-form-control.pf-m-error::before,
+html.login-pf .pf-v5-c-form-control[aria-invalid="true"]::before { border-color: var(--tw-error); }
+html.login-pf .pf-m-error,
+html.login-pf .kc-feedback-text { color: var(--tw-error); }
+
+/* ---- Orange pill buttons ---- */
+html.login-pf .pf-v5-c-button.pf-m-primary {
+  padding: 12px 20px;
+  border-radius: 999px;
+  background: var(--tw-accent);
+  color: #ffffff;
+  font-weight: 600;
+}
+html.login-pf .pf-v5-c-button.pf-m-primary:hover,
+html.login-pf .pf-v5-c-button.pf-m-primary:focus { background: var(--tw-accent-hover); color: #ffffff; }
+html.login-pf .pf-v5-c-button::after { border-radius: 999px; }
+/* The small "show password" eye button next to a password field. */
+html.login-pf .pf-v5-c-button.pf-m-control {
+  border-radius: 999px;
+  color: var(--tw-muted);
+  background: transparent;
+}
+html.login-pf .pf-v5-c-button.pf-m-control::after { border: 0; }
+
+/* ---- Links and the footer strip ("Back to Login", "New user? Register") ---- */
+html.login-pf a { color: var(--tw-accent); }
+html.login-pf a:hover { color: var(--tw-accent-hover); }
+html.login-pf .pf-v5-c-login__main-footer-band { background: var(--tw-bg); border-top: 1px solid var(--tw-border); }
+html.login-pf .pf-v5-c-alert { border-radius: 12px; }
+
+/* ---- Phones: let the card use the screen width (Keycloak fixes it at 34rem) ---- */
+@media (max-width: 600px) {
+  html.login-pf .pf-v5-c-login__container {
+    grid-template-columns: 1fr;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}

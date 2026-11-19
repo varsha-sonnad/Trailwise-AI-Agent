@@ -1,0 +1,17 @@
+# .dockerignore: keeps local files out of the frontend Docker build (the build context is this folder).
+
+# Installed in the image by "npm ci", so the local copy must not be sent.
+node_modules
+
+# Local build output; the image builds its own.
+dist
+
+# Local settings and anything that could hold secrets. Only the committed example is kept.
+.env
+.env.*
+!.env.example
+
+# Version control and editor/OS files.
+.git
+*.log
+.DS_Store

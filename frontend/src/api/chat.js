@@ -8,6 +8,8 @@ export const MAX_MESSAGE_CHARS = 1000;
 
 // Turn a failed HTTP status into a short message the user can understand.
 function describeChatError(status) {
+  // 401 = the sign-in is no longer valid (for example it expired).
+  if (status === 401) return "Your sign-in has expired. Please log in again.";
   if (status === 422) return `That message was not accepted. Keep it between 1 and ${MAX_MESSAGE_CHARS} characters.`;
   // 503 = the AI service is overloaded (temporary); 502 = it failed for another reason.
   if (status === 503) return "The assistant is busy right now (high demand). Please try again in a minute.";
