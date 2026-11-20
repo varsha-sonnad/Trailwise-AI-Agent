@@ -13,6 +13,8 @@ from tools.geocode_tool import CACHE_TTL_SECONDS, MAX_PLACES, geocode_places
 BASE_URL = "https://geo.example.test"
 USER_AGENT = "TestApp/1.0 (contact: test@example.invalid)"
 CONTEXT = "Uttarakhand, India"
+# A Redis address with a password in it, to prove that neither the address nor the password ever reaches the logs.
+REDIS_URL = "redis://redisuser:secretpw@cache.example.test:6379/0"
 
 
 def hit(lat="29.9457", lon="78.1642"):
@@ -56,7 +58,8 @@ def ok(body):
 class FakeRedis:
     """Stand-in for a Redis client: a dict with get and set (with ex, nx, px), and a log of every set call."""
 
-    def __init__(self, slot_busy_times=0, broken=False):
+    def __init__(self, slot_busy_times=0, broken=False, error=None):
+        self.error = error  # what a broken Redis raises (a plain ConnectionError by default)
         self.data = {}
         self.sets = []  # (key, ex, nx, px)
         self.slot_busy_times = slot_busy_times  # how many times the shared slot is "taken by someone else"
@@ -65,12 +68,12 @@ class FakeRedis:
 
     async def get(self, key):
         if self.broken:
-            raise ConnectionError("redis down")
+            raise self.error or ConnectionError("redis down")
         return self.data.get(key)
 
     async def set(self, key, value, ex=None, nx=False, px=None):
         if self.broken:
-            raise ConnectionError("redis down")
+            raise self.error or ConnectionError("redis down")
         self.sets.append((key, ex, nx, px))
         if nx:  # the shared request slot
             if self.slot_busy_times > 0:
@@ -94,8 +97,9 @@ def env(monkeypatch):
     settings = geocode_tool.get_settings()
     monkeypatch.setattr(settings, "geocode_base_url", BASE_URL)
     monkeypatch.setattr(settings, "geocode_user_agent", USER_AGENT)
+    monkeypatch.setattr(settings, "redis_url", REDIS_URL)  # Redis is "set": tests never depend on the real .env
     fake_redis = FakeRedis()
-    monkeypatch.setattr(geocode_tool.redis, "from_url", lambda url: fake_redis)
+    monkeypatch.setattr(geocode_tool.redis, "from_url", lambda url, **kw: fake_redis)
     sleeps = []
 
     async def fake_sleep(seconds):
@@ -116,7 +120,7 @@ def env(monkeypatch):
             return self.client
 
         def use_redis(self, replacement):
-            monkeypatch.setattr(geocode_tool.redis, "from_url", lambda url: replacement)
+            monkeypatch.setattr(geocode_tool.redis, "from_url", lambda url, **kw: replacement)
             return replacement
 
     return Env()
@@ -426,7 +430,7 @@ async def test_redis_down_still_works_without_cache_and_with_an_in_process_limit
 
 
 async def test_a_bad_redis_url_does_not_break_the_tool(env, monkeypatch):
-    def broken_from_url(url):
+    def broken_from_url(url, **kw):
         raise ValueError("bad url with a password in it")
 
     monkeypatch.setattr(geocode_tool.redis, "from_url", broken_from_url)
@@ -439,6 +443,94 @@ async def test_the_redis_connection_is_closed(env):
     env.http(ok(hit()))
     await geocode_places(["Haridwar"], CONTEXT)
     assert env.redis.closed is True
+
+
+# ---------------------------------------------------------------- Redis is optional
+
+
+def test_redis_url_defaults_to_empty_so_redis_is_optional(monkeypatch):
+    """With REDIS_URL not set the setting is empty (no default address), and a set value is used as given."""
+    from config import Settings
+
+    monkeypatch.delenv("REDIS_URL", raising=False)
+    assert Settings(_env_file=None).redis_url == ""
+    monkeypatch.setenv("REDIS_URL", "redis://cache.example.test:6379/0")
+    assert Settings(_env_file=None).redis_url == "redis://cache.example.test:6379/0"
+
+
+@pytest.mark.parametrize("unset", ["", "   "])
+async def test_redis_url_not_set_skips_the_cache_silently_and_still_works(env, monkeypatch, caplog, unset):
+    monkeypatch.setattr(geocode_tool.get_settings(), "redis_url", unset)
+
+    def no_client_allowed(*args, **kwargs):
+        raise AssertionError("no Redis client may even be created when REDIS_URL is not set")
+
+    monkeypatch.setattr(geocode_tool.redis, "from_url", no_client_allowed)
+    client = env.http(ok(hit("1.0", "2.0")), ok(hit("1.0", "2.0")))
+    with caplog.at_level(logging.DEBUG):
+        first = await geocode_places(["Haridwar"], CONTEXT)
+        second = await geocode_places(["Haridwar"], CONTEXT)
+    assert first["places"][0]["found"] is True and second["places"][0]["found"] is True
+    assert len(client.calls) == 2  # no cache: the second call went to the service again
+    assert "redis" not in caplog.text.lower()  # not a warning, not even a debug line: silence
+
+
+async def test_without_redis_the_one_request_per_second_limit_still_holds_inside_a_call(env, monkeypatch, caplog):
+    monkeypatch.setattr(geocode_tool.get_settings(), "redis_url", "")
+    clock = {"t": 100.0}
+    monkeypatch.setattr(geocode_tool, "_now", lambda: clock["t"])  # time stands still: the limiter must wait
+    client = env.http(ok(hit("1.0", "2.0")), ok(hit("3.0", "4.0")), ok(hit("5.0", "6.0")))
+    with caplog.at_level(logging.DEBUG):
+        result = await geocode_places(["Haridwar", "Rishikesh", "Dehradun"], CONTEXT)
+    assert [p["found"] for p in result["places"]] == [True, True, True]
+    assert len(client.calls) == 3
+    assert env.sleeps.count(geocode_tool.MIN_INTERVAL_SECONDS) == 2  # the 2nd and 3rd requests each waited a second
+    assert "redis" not in caplog.text.lower()
+
+
+@pytest.mark.parametrize(
+    "error",
+    [None, OSError("network unreachable"), TimeoutError("timed out")],
+    ids=["connection refused", "os error", "timeout"],
+)
+async def test_redis_set_but_unreachable_logs_one_short_warning_per_call_and_still_works(env, caplog, error):
+    env.use_redis(FakeRedis(broken=True, error=error))
+    client = env.http(ok(hit("1.0", "2.0")), ok(hit("3.0", "4.0")), ok(hit("5.0", "6.0")), ok(hit("7.0", "8.0")))
+    with caplog.at_level(logging.DEBUG):
+        first = await geocode_places(["Haridwar", "Rishikesh", "Dehradun"], CONTEXT)  # three names: still ONE warning
+        after_first = [r for r in caplog.records if "Redis" in r.getMessage()]
+        second = await geocode_places(["Mussoorie"], CONTEXT)  # a new call: one more warning
+    assert all(p["found"] for p in first["places"]) and second["places"][0]["found"] is True  # works without the cache
+    assert len(client.calls) == 4
+    warnings = [r for r in caplog.records if "Redis" in r.getMessage()]
+    assert len(after_first) == 1 and len(warnings) == 2  # one warning per tool call
+    assert all(r.levelno == logging.WARNING and len(r.getMessage()) < 80 for r in warnings)  # short, and a warning
+    # The address, the user name and the password never reach the log, and nor does the error text.
+    for text in ("secretpw", "redisuser", "cache.example.test", "redis://", "network unreachable", "timed out"):
+        assert text not in caplog.text
+
+
+async def test_a_reachable_redis_logs_no_warning(env, caplog):
+    env.http(ok(hit()))
+    with caplog.at_level(logging.DEBUG):
+        result = await geocode_places(["Haridwar"], CONTEXT)
+    assert result["places"][0]["found"] is True
+    assert "redis" not in caplog.text.lower()
+
+
+async def test_the_redis_client_gets_short_timeouts_so_it_cannot_hold_a_tool_call(env, monkeypatch):
+    seen = {}
+
+    def spy(url, **kwargs):
+        seen["url"], seen["kwargs"] = url, kwargs
+        return env.redis
+
+    monkeypatch.setattr(geocode_tool.redis, "from_url", spy)
+    env.http(ok(hit()))
+    await geocode_places(["Haridwar"], CONTEXT)
+    assert seen["url"] == REDIS_URL
+    assert seen["kwargs"] == {"socket_connect_timeout": 2.0, "socket_timeout": 2.0}
+    assert geocode_tool.REDIS_TIMEOUT_SECONDS == 2.0
 
 
 # ---------------------------------------------------------------- logging and registration
@@ -461,3 +553,41 @@ async def test_tool_registered_in_server():
     assert set(tool.inputSchema["properties"]) == {"names", "context"}
     assert tool.inputSchema["required"] == ["names"]
     assert "12" in tool.description and "unavailable" in tool.description
+
+
+# ---------------------------------------------------------------- map zoom hint for a single place
+
+async def test_one_found_place_gets_a_city_level_zoom_hint(env):
+    env.http(ok(hit()))
+    result = await geocode_places(["Haridwar"], CONTEXT)
+    assert result["zoom"] == 11 and 10 <= result["zoom"] <= 12  # city level
+
+
+async def test_several_places_get_no_zoom_hint_because_a_map_should_fit_them_all(env):
+    env.http(ok(hit()), ok(hit("30.0869", "78.2676")))
+    result = await geocode_places(["Haridwar", "Rishikesh"], CONTEXT)
+    assert "zoom" not in result
+
+
+async def test_the_same_name_twice_is_still_a_single_place_with_a_zoom_hint(env):
+    env.http(ok(hit()))
+    result = await geocode_places(["Haridwar", "haridwar"], CONTEXT)
+    assert result["zoom"] == 11 and len(result["places"]) == 2
+
+
+async def test_a_single_place_that_was_not_found_gets_no_zoom_hint(env):
+    env.http(ok({}))
+    result = await geocode_places(["Nowhereville"], CONTEXT)
+    assert result["places"][0]["found"] is False and "zoom" not in result
+
+
+async def test_a_single_place_whose_lookup_failed_gets_no_zoom_hint(env):
+    env.http(httpx.Response(500), httpx.Response(500), httpx.Response(500))
+    result = await geocode_places(["Haridwar"], CONTEXT)
+    assert result["places"][0].get("error") == "unavailable" and "zoom" not in result
+
+
+def test_the_zoom_constant_is_city_level():
+    from tools import geocode_tool
+
+    assert 10 <= geocode_tool.CITY_ZOOM <= 12
