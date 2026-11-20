@@ -45,7 +45,7 @@ Trailwise puts everything in **one chat**. The user types something like *"Plan 
 |---|---|---|
 | Frontend | React + Vite | Fast, simple UI for chat, maps, and itinerary |
 | Backend | Python + FastAPI | Quick to build, async, great for APIs and AI work |
-| AI Agent | Gemini (Google Gemini API, function calling) | Understands user requests and decides which tools to use |
+| AI Agent | OpenAI (Responses API, function calling) | Understands user requests and decides which tools to use |
 | Tool communication | MCP (Model Context Protocol) | Standard way for the agent to call tools |
 | Database | MongoDB | Flexible storage for trips, chats, and history |
 | Cache / sessions | Redis | Very fast memory store for cached API data, guest chats, and rate limits |
@@ -75,7 +75,7 @@ A simple layered design. Each layer has one job.
 |---|---|
 | **Frontend (React)** | Chat screen, maps, images, itinerary display |
 | **API layer (FastAPI)** | Receives requests, validates input, checks the user, loads and saves chat, returns the response |
-| **Agent layer (Gemini)** | Understands the request and picks a mode: **Explore, Route, Itinerary, or Email** |
+| **Agent layer (OpenAI)** | Understands the request and picks a mode: **Explore, Route, Itinerary, or Email** |
 | **Tool layer (MCP client + server)** | Agent calls tools in a standard way |
 | **Services layer (Python tools)** | Weather, transport search, place details, images, email |
 | **Data layer (Redis + MongoDB)** | Redis for temporary data, MongoDB for permanent data |
@@ -246,7 +246,7 @@ Sections 10 to 17 were added after reviewing this plan for gaps. Each has step-b
 
 ## 12. API Keys and Secrets
 
-**Keys needed:** Gemini, OpenWeatherMap, Pexels, transport provider, email provider, Keycloak admin and client settings, database credentials.
+**Keys needed:** OpenAI, OpenWeatherMap, Pexels, transport provider, email provider, Keycloak admin and client settings, database credentials.
 
 **Steps:**
 1. Keep all keys in `.env` locally. Add `.env` to `.gitignore` and commit a `.env.example` with fake values.
@@ -293,7 +293,7 @@ Sections 10 to 17 were added after reviewing this plan for gaps. Each has step-b
 2. Add `/health` (liveness) and `/ready` (checks Redis and Mongo) endpoints.
 3. Nginx config: set `proxy_buffering off` for SSE streaming, set long read timeouts, set request size limits.
 4. Redis: set a `maxmemory` limit and an eviction policy. Either enable persistence for guest chats, or accept that a Redis restart loses them and document it.
-5. Rate limiting: configure slowapi with a Redis storage backend, otherwise limits are per worker. Add a global daily cap on Gemini usage as well as per-user limits.
+5. Rate limiting: configure slowapi with a Redis storage backend, otherwise limits are per worker. Add a global daily cap on OpenAI usage as well as per-user limits.
 6. MongoDB: create indexes (`user_id`, `created_at`), use a managed service or schedule backups, and test a restore.
 7. Set up CI/CD (GitHub Actions: lint, tests, evals, build, deploy) with a staging environment and a rollback plan.
 8. Handle graceful shutdown so in-flight streams finish when a container restarts.
@@ -305,7 +305,7 @@ Sections 10 to 17 were added after reviewing this plan for gaps. Each has step-b
 1. Use structured JSON logs with a request ID on every line.
 2. Log per request: mode, tools called, cache hit or miss, tokens, latency, errors. Never log keys, and avoid logging message contents unnecessarily.
 3. Add Sentry (or similar) for errors and Prometheus metrics for latency, error rate, and cache hit rate.
-4. Set alerts for error rate, p95 latency, Gemini usage, and external API quota nearing its limit.
+4. Set alerts for error rate, p95 latency, OpenAI usage, and external API quota nearing its limit.
 5. Add circuit breakers and fallbacks for each external API (for example "weather unavailable right now" instead of failing the whole plan).
 
 ## 16. Product and Legal Items

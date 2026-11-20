@@ -32,7 +32,7 @@ flowchart TB
   end
 
   subgraph OUTSIDE[6. Outside services]
-    LLM([Gemini API])
+    LLM([OpenAI API])
     EXT([External APIs: Weather, Images, Routes, Geocoding, Transport, Email])
   end
 
@@ -46,7 +46,7 @@ flowchart TB
   SVC --> DB
 ```
 
-Reading the diagram: it shows **who talks to whom**, grouped in layers from top to bottom. Double-headed arrows form the main chain, from the user down to the tool services: a request goes down and the reply comes back up the same path. Single-headed arrows point to a resource a box simply uses (Redis, MongoDB, Gemini, external APIs); the answer comes back automatically. Rounded boxes are outside services we call over the internet; cylinders are our own databases. The step-by-step order of one request, including the return path, is in section 3.
+Reading the diagram: it shows **who talks to whom**, grouped in layers from top to bottom. Double-headed arrows form the main chain, from the user down to the tool services: a request goes down and the reply comes back up the same path. Single-headed arrows point to a resource a box simply uses (Redis, MongoDB, OpenAI, external APIs); the answer comes back automatically. Rounded boxes are outside services we call over the internet; cylinders are our own databases. The step-by-step order of one request, including the return path, is in section 3.
 
 - **API process:** validates input (Pydantic), checks auth and ownership, loads and saves chat, calls the agent, streams the reply. Stateless; any copy can serve any request.
 - **Agent layer:** understands the request, picks a mode, decides which tools to call, writes the answer.
@@ -66,7 +66,7 @@ Dependency direction (no upward imports): `core` ← `cache` / `auth` ← `servi
 | `ratelimit` | slowapi setup (Redis backend), per-user and per-IP limits, global daily AI spend cap | block cached reads that cost nothing |
 | `services` | One async client per external provider: weather, images, routes, places, geocoding, transport, email | talk to the agent or the database directly |
 | `tools` | MCP server tool definitions, MCP client, argument validation, per-mode tool allow-list | contain provider logic (it calls `services`) |
-| `agent` | Mode selection, prompts, Gemini adapter, tool-call loop with cap, output schema validation, history trimming | write to MongoDB directly |
+| `agent` | Mode selection, prompts, OpenAI adapter, tool-call loop with cap, output schema validation, history trimming | write to MongoDB directly |
 | `chat` | Chat endpoints, history load and save, SSE streaming | build prompts |
 | `trips` | Saved trips, explore history, export and delete my data | call external APIs |
 | `observability` | JSON logs, Sentry, Prometheus metrics | log secrets or message contents unnecessarily |
@@ -83,7 +83,7 @@ sequenceDiagram
   participant NG as Nginx
   participant API as FastAPI
   participant AG as Agent layer
-  participant AI as Gemini API
+  participant AI as OpenAI API
   participant MC as MCP (client + server)
   participant T as Tool services
   participant R as Redis
@@ -181,8 +181,8 @@ Full field lists and indexes are settled in Phase 0. Overview:
 flowchart LR
   S[Chat service] --> PB[Context builder: trimmed history]
   PB --> PR[Prompt registry: mode + version]
-  PR --> AD[Gemini adapter]
-  AD --> LLM[GPT-4.1-mini]
+  PR --> AD[OpenAI adapter]
+  AD --> LLM[OpenAI model, set in OPENAI_MODEL]
   LLM --> TL[Tool loop via MCP, capped]
   TL --> V[Schema validation]
   V --> S
@@ -202,7 +202,7 @@ flowchart LR
 
 | Need | Provider | Status |
 |---|---|---|
-| LLM | Google Gemini (gemini-3.5-flash) | Chosen |
+| LLM | OpenAI (Responses API; model names set in `OPENAI_MODEL`, `OPENAI_FALLBACK_MODEL` and `OPENAI_SEARCH_MODEL`) | Chosen |
 | Weather | OpenWeatherMap | Chosen |
 | Images | Pexels (attribution shown) | Chosen |
 | Maps display | Leaflet + MapTiler or Stadia tiles (not public OSM tiles) | Chosen, provider to pick |
@@ -230,5 +230,5 @@ flowchart LR
 - `/health` (liveness) and `/ready` (checks Redis and MongoDB). Graceful shutdown lets in-flight streams finish.
 - MongoDB: indexes, managed service or scheduled backups, restore tested.
 - CI/CD on GitHub Actions: lint, unit and integration tests, golden eval set, build, deploy, with staging and a rollback plan.
-- Observability: JSON logs with a request ID, Sentry for errors, Prometheus metrics (latency, error rate, cache hit rate), alerts on error rate, p95 latency, Gemini usage and API quota.
+- Observability: JSON logs with a request ID, Sentry for errors, Prometheus metrics (latency, error rate, cache hit rate), alerts on error rate, p95 latency, OpenAI usage and API quota.
 - Testing: pytest, a golden set of 30 to 50 prompts across all modes (including Hindi and Kannada and injection attempts) run in CI, and Locust for load.
