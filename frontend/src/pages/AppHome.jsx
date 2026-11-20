@@ -3,16 +3,19 @@
 // chat itself: the conversation and a chat bar with a mic and a send button. Clicking a card or chip on Home opens
 // Chats with a message pre-filled (not sent). UI only: the chat uses the shared conversation held in App.jsx (the
 // same POST /chat as the rest of the app). A guest sees a "Log in" button where a signed-in user sees "Log out", and
-// the Saved panel asks a guest to log in; Saved and Explore are otherwise "coming soon".
+// the Saved panel asks a guest to log in; Saved is otherwise "coming soon". Explore (pages/Explore.jsx) is a search box and a grid of
+// place cards that open a side panel; its buttons open Chats with a message pre-filled, like the Home cards.
 // The layout idea (sidebar on the left, chat bar pinned to the bottom) is generic; the look is the Trailwise sunset
 // style from styles.css. On phones the sidebar becomes a bar of tabs at the bottom.
 
 import { useEffect, useState } from "react";
 import { MAX_MESSAGE_CHARS } from "../api/chat";
+import ChatSplit from "../components/ChatSplit";
 import HomeDashboard from "../components/HomeDashboard";
 import MessageList from "../components/MessageList";
 import { getReturningUserData } from "../data/mockReturningUser";
 import { VOICE_LANGUAGES, useVoice } from "../hooks/useVoice";
+import Explore from "./Explore";
 
 // The only sidebar items, in order. "id" picks the panel shown in the main area.
 const SECTIONS = [
@@ -123,9 +126,9 @@ function ChatBar({ onSend, disabled, initialText, onTextTaken }) {
 }
 
 // user: the signed-in user ({ name }), or null for a guest; messages / pending / onSend: the shared conversation from
-// App.jsx; onLogin(): open the login pop-up; onLogout(): sign out; draft: text from the public home page's search box,
+// App.jsx; onNewChat(): clear the conversation and its memory; onLogin(): go to the Keycloak login page; onLogout(): sign out; draft: text from the public home page's search box,
 // which pre-fills the chat input once (onDraftUsed() then clears it). Nothing here talks to the backend or Keycloak.
-export default function AppHome({ user, messages, pending, onSend, onLogin, onLogout, draft, onDraftUsed }) {
+export default function AppHome({ user, messages, pending, onSend, onNewChat, onLogin, onLogout, draft, onDraftUsed }) {
   // Which panel the sidebar has selected. Text from the public home page's search box goes straight to Chats.
   const [section, setSection] = useState(draft ? "chats" : "home");
   // The text to pre-fill in the chat bar, taken once when Chats opens (the chat bar clears it after using it, so
@@ -168,6 +171,12 @@ export default function AppHome({ user, messages, pending, onSend, onLogin, onLo
 
       <section className="app-main">
         <header className="app-top">
+          {/* New chat clears the conversation and its memory (the earlier messages, the mode and the place). */}
+          {section === "chats" && started && (
+            <button type="button" className="link-button" onClick={onNewChat}>
+              New chat
+            </button>
+          )}
           {user ? (
             <>
               <span className="app-user">Hi, {user.name.split(" ")[0]}</span>
@@ -176,7 +185,7 @@ export default function AppHome({ user, messages, pending, onSend, onLogin, onLo
               </button>
             </>
           ) : (
-            // A guest: Log in instead of Log out (it opens the same login pop-up as the home page).
+            // A guest: Log in instead of Log out (it goes straight to Keycloak's login page, like the header on the home page).
             <>
               <span className="app-user">Browsing as a guest</span>
               <button type="button" className="link-button" onClick={onLogin}>
@@ -189,7 +198,7 @@ export default function AppHome({ user, messages, pending, onSend, onLogin, onLo
         {section === "home" && <HomeDashboard user={user} returning={returning} onPrompt={openChatWith} />}
 
         {section === "chats" && (
-          <>
+          <ChatSplit messages={messages}>
             {started ? (
               <MessageList messages={messages} pending={pending} />
             ) : (
@@ -202,16 +211,16 @@ export default function AppHome({ user, messages, pending, onSend, onLogin, onLo
               </div>
             )}
             <ChatBar onSend={onSend} disabled={pending} initialText={prefill} onTextTaken={() => setPrefill("")} />
-          </>
+          </ChatSplit>
         )}
 
-        {/* Saved and Explore have no data yet. A guest who opens Saved is asked to log in. */}
-        {(section === "saved" || section === "explore") && (
+        {section === "explore" && <Explore onPrompt={openChatWith} />}
+
+        {/* Saved has no data yet. A guest who opens it is asked to log in. */}
+        {section === "saved" && (
           <div className="app-content">
-            <h2 className="greeting">{SECTIONS.find((s) => s.id === section).label}</h2>
-            <p className="greeting-sub">
-              {section === "saved" && !user ? "Log in to save your trips" : "Coming soon. For now, plan a trip from Home."}
-            </p>
+            <h2 className="greeting">Saved</h2>
+            <p className="greeting-sub">{!user ? "Log in to save your trips" : "Coming soon. For now, plan a trip from Home."}</p>
           </div>
         )}
       </section>

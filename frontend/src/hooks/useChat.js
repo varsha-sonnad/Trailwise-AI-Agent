@@ -1,27 +1,32 @@
 // useChat.js: React hook that holds the conversation state for the chat screen.
 // It keeps the list of messages, whether a reply is pending, and sends messages to the backend.
-// The backend does not keep chat history yet, so this list lives only in the browser tab.
+// Per-session memory: the earlier messages, the mode of the last reply and the last place are kept in React state only
+// (no localStorage, no cookies, nothing on the server) and are sent with every message, so the assistant remembers this chat.
+// "New chat" (reset) and a page refresh clear all of it.
 
 import { useCallback, useRef, useState } from "react";
 import { MAX_MESSAGE_CHARS, sendMessage } from "../api/chat";
-
-// The first message shown when the page opens.
-const GREETING = "Hi! Tell me where you want to go and I will help you plan it.";
+import { emptyMemory, initialMessages, memoryFor, nextMemory } from "./chatMemory";
 
 export function useChat() {
-  // Each message: { id, role: "user" | "bot" | "error", text }.
-  const [messages, setMessages] = useState([{ id: 0, role: "bot", text: GREETING }]);
+  // Each message: { id, role: "user" | "bot" | "error", text, images, places, route } (images: the photos under a bot reply, usually
+  // none; places and route: what the map panel draws for that reply, usually empty).
+  const [messages, setMessages] = useState(initialMessages);
   // True while we wait for the backend, so the UI can show "Thinking..." and block double sends.
   const [pending, setPending] = useState(false);
   // Counter that gives every message its own id (React needs stable keys).
   const nextId = useRef(1);
+  // The mode of the last reply and the last geocoded place (see chatMemory.js). A ref: it is not shown, only sent.
+  const memory = useRef(emptyMemory());
+  // Counts "New chat" presses. A reply that arrives after one is dropped, so it cannot leak into the new chat.
+  const generation = useRef(0);
 
   // Add one message to the end of the conversation.
-  const addMessage = useCallback((role, text) => {
-    setMessages((current) => [...current, { id: nextId.current++, role, text }]);
+  const addMessage = useCallback((role, text, images = [], places = [], route = []) => {
+    setMessages((current) => [...current, { id: nextId.current++, role, text, images, places, route }]);
   }, []);
 
-  // Send a user message: show it, call the backend, then show the reply or an error.
+  // Send a user message: show it, call the backend with the memory, then show the reply or an error.
   const send = useCallback(
     async (text) => {
       const message = text.trim();
@@ -30,19 +35,35 @@ export function useChat() {
         addMessage("error", `Please keep your message under ${MAX_MESSAGE_CHARS} characters.`);
         return;
       }
+      // The memory that goes along: the earlier messages (before this one), the last mode and the last place.
+      const sent = memoryFor(messages, memory.current);
+      const mine = generation.current;
       addMessage("user", message);
       setPending(true);
       try {
-        addMessage("bot", await sendMessage(message));
+        const { reply, images, mode, places, route } = await sendMessage(message, sent);
+        if (mine !== generation.current) return; // "New chat" was pressed while waiting
+        memory.current = nextMemory(memory.current, { mode, places });
+        addMessage("bot", reply, images, places, route);
       } catch (err) {
+        if (mine !== generation.current) return;
         // ApiError messages are already friendly; anything else gets a generic line.
         addMessage("error", err.message || "Something went wrong. Please try again.");
       } finally {
-        setPending(false);
+        if (mine === generation.current) setPending(false);
       }
     },
-    [pending, addMessage],
+    [pending, messages, addMessage],
   );
 
-  return { messages, pending, send };
+  // New chat: forget the messages, the mode and the place, and ignore any reply still on its way.
+  const reset = useCallback(() => {
+    generation.current += 1;
+    memory.current = emptyMemory();
+    nextId.current = 1;
+    setMessages(initialMessages());
+    setPending(false);
+  }, []);
+
+  return { messages, pending, send, reset };
 }

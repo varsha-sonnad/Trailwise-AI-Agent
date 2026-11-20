@@ -18,6 +18,10 @@ COPY . .
 ARG VITE_API_URL=http://localhost:8000
 ENV VITE_API_URL=$VITE_API_URL
 # Non-secret Keycloak settings for the browser (where Keycloak is, which realm, which client).
+# The map tile address (public, not a secret; it ends up in the browser bundle). Must contain {z}, {x} and {y}.
+ARG VITE_MAP_TILE_URL=https://tile.openstreetmap.org/{z}/{x}/{y}.png
+ENV VITE_MAP_TILE_URL=$VITE_MAP_TILE_URL
+
 ARG VITE_KEYCLOAK_URL=http://localhost:8080
 ARG VITE_KEYCLOAK_REALM=trailwise
 ARG VITE_KEYCLOAK_CLIENT_ID=trailwise-web
