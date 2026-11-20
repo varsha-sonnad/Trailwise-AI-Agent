@@ -11,8 +11,8 @@ pydantic[email]>=2.8,<3
 aiosmtplib>=3,<6
 pydantic-settings>=2.4,<3
 
-# Google Gemini API client, used by the agent later
-google-genai>=1.0
+# OpenAI API client (Responses API), used by the agent and (through the MCP server) by the web_search tool
+openai>=3,<4
 
 # Async database clients: MongoDB (PyMongo's AsyncMongoClient; [srv] adds DNS support for Atlas mongodb+srv:// links) and Redis
 pymongo[srv]>=4.13,<5

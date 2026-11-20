@@ -23,9 +23,10 @@ COPY backend/tests ./tests
 COPY backend/pytest.ini .
 COPY mcp_server /app/mcp_server
 
-# Run as a normal user; the audit log needs a writable logs/ folder.
+# Run as a normal user; the audit log needs a writable logs/ folder, and /app/logs is where the optional debug log
+# (DEBUG_LOG_FILE) is written; docker-compose.override.yml can mount it on your machine (./debug-logs).
 RUN useradd --create-home trailwise \
-    && mkdir -p /app/backend/logs \
+    && mkdir -p /app/backend/logs /app/logs \
     && chown -R trailwise:trailwise /app
 USER trailwise
 

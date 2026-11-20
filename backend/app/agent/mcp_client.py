@@ -14,10 +14,23 @@ from pathlib import Path
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from app.config import get_settings
+
 # The MCP server folder: backend/app/agent -> backend/app -> backend -> project root / mcp_server.
 SERVER_DIR = Path(__file__).resolve().parents[3] / "mcp_server"
 # Give up on a single tool call after this many seconds.
 CALL_TIMEOUT_SECONDS = 30
+# Tools whose limit comes from a setting instead: tool name -> the setting on app.config.Settings. web_search waits up to
+# OPENAI_SEARCH_TIMEOUT_SECONDS (default 120) for OpenAI and retries a timeout once, so its call limit
+# (WEB_SEARCH_CALL_TIMEOUT_SECONDS, default 150) is higher; the tool holds both attempts to that limit minus a safety margin
+# (mcp_server/tools/web_search.py), so it answers "timeout" itself before this limit cuts it off.
+TOOL_CALL_TIMEOUT_SETTINGS = {"web_search": "web_search_call_timeout_seconds"}
+
+
+def call_limit(name: str) -> float:
+    """The time limit, in seconds, for one call of this tool: its setting when it has one, else CALL_TIMEOUT_SECONDS."""
+    setting = TOOL_CALL_TIMEOUT_SETTINGS.get(name)
+    return float(getattr(get_settings(), setting)) if setting else CALL_TIMEOUT_SECONDS
 
 
 class McpClientError(Exception):
@@ -68,10 +81,12 @@ class McpClient:
 
     async def call_tool(self, name: str, arguments: dict) -> dict:
         """Call a tool. Always returns a dict; failures come back as {"ok": False, "error": ...}."""
+        limit = call_limit(name)
         try:
-            result = await asyncio.wait_for(
-                self._session.call_tool(name, arguments), timeout=CALL_TIMEOUT_SECONDS
-            )
+            result = await asyncio.wait_for(self._session.call_tool(name, arguments), timeout=limit)
+        except asyncio.TimeoutError:
+            # The call limit was reached before the tool answered: the same word the search tool itself uses.
+            return {"ok": False, "error": "timeout", "message": f"Tool '{name}' took too long."}
         except Exception:
             return {"ok": False, "error": "tool_call_failed", "message": f"Tool '{name}' could not be called."}
         # Tool output is data, never instructions: parse it as JSON and hand back only that data.
