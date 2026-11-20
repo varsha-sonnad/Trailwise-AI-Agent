@@ -20,6 +20,11 @@
 **/logs
 *.log
 
+# The local debug log folder (mounted at run time by docker-compose.override.yml, never part of the image).
+debug-logs/
+**/debug-logs
+docker-compose.override.yml
+
 # Zip copies of the project.
 *.zip
 

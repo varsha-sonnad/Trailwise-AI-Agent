@@ -51,6 +51,9 @@ services:
       - "8000:8000"
     volumes:
       - ./.env:/app/.env:ro
+      # The audit log: shared with your machine (backend/logs/audit.log), so you can read it there and it survives
+      # rebuilds. Without this line the log lives only inside the container and is lost when it is recreated.
+      - ./backend/logs:/app/backend/logs
     environment:
       # Inside Docker the backend reaches Keycloak by its service name to fetch the public keys.
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
@@ -64,6 +67,8 @@ services:
       context: ./frontend
       args:
         VITE_API_URL: http://localhost:8000
+        # The map tiles (OpenStreetMap's public server is for light use; put your own provider's address here if you have one).
+        VITE_MAP_TILE_URL: "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         # Non-secret Keycloak settings the browser needs (baked in at build time).
         VITE_KEYCLOAK_URL: http://localhost:8080
         VITE_KEYCLOAK_REALM: trailwise
