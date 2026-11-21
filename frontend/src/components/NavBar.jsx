@@ -1,14 +1,13 @@
-// NavBar.jsx: the public site's top bar. Three items: "Destinations" (scrolls to that section), "Plan a Trip" and
-// "Log in", with the Trailwise logo on the left. "Plan a Trip" and "Log in" both open the login pop-up (a signed-in
-// visitor sees "Hi, name" and "Log out", and "Plan a Trip" opens the app). On narrow screens the items fold into
-// a menu button. It only reports clicks; App.jsx decides what happens.
+// NavBar.jsx: the public site's top bar: the Trailwise logo on the left and, in the right corner, "Destinations"
+// (scrolls to that section) and "Log in" (a signed-in visitor sees "Hi, name" and "Log out" instead).
+// On narrow screens the items fold into a menu button. It only reports clicks; App.jsx decides what happens.
 
 import { useState } from "react";
 
-// onHome(): the logo. onDestinations(): scroll to the destinations section. onPlanTrip(): "Plan a Trip".
+// onHome(): the logo. onDestinations(): scroll to the destinations section.
 // onLogin() / onLogout(): the account buttons. user: the signed-in user ({ name }) or null.
 // overHero: draw the bar transparent, with dark text, on top of the sunset home hero.
-export default function NavBar({ onHome, onDestinations, onPlanTrip, onLogin, onLogout, overHero, user }) {
+export default function NavBar({ onHome, onDestinations, onLogin, onLogout, overHero, user }) {
   // Whether the folded menu is open (only matters on narrow screens).
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -27,9 +26,6 @@ export default function NavBar({ onHome, onDestinations, onPlanTrip, onLogin, on
       <nav id="nav-links" className={`nav-links${menuOpen ? " open" : ""}`} aria-label="Main">
         <button type="button" className="nav-link" onClick={() => pick(onDestinations)}>
           Destinations
-        </button>
-        <button type="button" className="nav-link cta" onClick={() => pick(onPlanTrip)}>
-          Plan a Trip
         </button>
         {user ? (
           <>

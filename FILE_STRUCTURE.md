@@ -20,12 +20,13 @@ Trailwise_AI_Traveler/
 ├── keycloak/                  # exists: Keycloak setup (login server): the realm file imported on first start, and the Trailwise login theme
 │   ├── trailwise-realm.json   # exists: realm "trailwise" (self-registration, email verification, public PKCE client, user-profile field order, login theme). No secrets
 │   └── themes/trailwise/login/ # exists: theme.properties (extends keycloak.v2) and resources/css/trailwise.css (sunset page, rounded card, orange buttons)
-├── mcp_server/                # exists (weather, web_search, get_train_details, search_buses, send_trip_email, geocode_places and get_route tools): Tools the AI agent calls
+├── mcp_server/                # exists (weather, web_search, search_trains, search_buses, send_trip_email, geocode_places, get_route and get_place_images tools): Tools the AI agent calls
 ├── nginx/                     # (to add) Load balancer and HTTPS
 ├── evals/                     # (to add) Test prompts for AI answer quality
 ├── .env                       # Real keys (never commit)
 ├── .env.example               # exists. Fake placeholder keys, safe to commit
 ├── .gitignore                 # Keeps .env, .venv, node_modules out of Git
+├── docker-compose.override.yml # exists (local only, git-ignored): mounts ./debug-logs at /app/logs
 ├── .dockerignore              # exists: Keeps secrets, .venv and logs out of the Docker build
 ├── ARCHITECTURE.md            # How the system is built
 ├── CLAUDE.md                  # Always-on rules for Claude Code
@@ -33,6 +34,7 @@ Trailwise_AI_Traveler/
 ├── docker-compose.yml         # Runs Redis, Mailpit, Keycloak, backend and frontend (MongoDB is Atlas, not a container)
 ├── FILE_STRUCTURE.md          # This file
 ├── plan.md                    # Project plan
+├── docs/prompts.md            # exists: prompt versioning rules (heading, version bumps, tags, rebuild, rollback)
 └── README.md                  # How to set up and run
 ```
 
@@ -65,8 +67,9 @@ backend/
 │   ├── models/                # Pydantic schemas for requests and responses
 │   └── core/                  # Security, rate limit, logging
 │       ├── audit.py           # exists: audit log of agent activity (JSON lines, no secrets or message text)
+│       ├── debug_log.py       # exists: optional plain-text debug log for local testing (DEBUG_LOG_FILE, LOG_MESSAGES)
 │       └── mongo.py           # exists: the shared AsyncMongoClient (MongoDB Atlas), ping, get_db(request)
-├── tests/                     # pytest tests (test_auth.py: exists, Keycloak token check tests; test_audit.py: exists, audit log tests; test_gemini_retry.py: exists, Gemini retry tests; test_model_fallback.py: exists, fallback model tests; test_mongo.py: exists, MongoDB client and /ready tests with a fake client; conftest.py: fake MongoDB client and fake MONGODB_URI for every test)
+├── tests/                     # pytest tests (test_auth.py: exists, Keycloak token check tests; test_audit.py: exists, audit log tests; test_debug_log.py: exists, debug log tests; test_openai_retry.py: exists, OpenAI retry tests; test_model_fallback.py: exists, fallback model tests; test_openai_adapter.py: exists, adapter helper tests; test_explore_required.py: exists, explore required-tools tests; test_force_web_search.py: exists, forced first web_search tests; test_chat_memory.py: exists, per-session memory tests; test_train_prompts.py: exists, train prompt rules and old-name tests; test_chat_images.py: exists, photos with a reply tests; test_required_modes.py: exists, itinerary and route required tools, the guard and the overall time cap tests; test_mcp_timeouts.py: exists, MCP call limit and search timeout reply tests; test_openai_config.py: exists, OpenAI settings tests; test_mongo.py: exists, MongoDB client and /ready tests with a fake client; conftest.py: fake MongoDB client and fake MONGODB_URI for every test)
 ├── pytest.ini                 # pytest settings
 ├── requirements.txt           # Python packages
 └── Dockerfile                 # (to add) Container image for the backend
@@ -82,8 +85,9 @@ It goes inside the backend, in the app/ folder. Create these files:
 
 backend/app/agent/
 ├── __init__.py       # exists
-├── agent.py          # exists: sends the message to Gemini and runs the MCP tool loop (capped at 5 rounds)
-├── modes.py          # Explore, Route, Itinerary, Email and the tools each may use
+├── agent.py          # exists: sends the message to OpenAI (Responses API) and runs the MCP tool loop (capped at 6 rounds; the first call is forced to be web_search)
+├── openai_adapter.py # exists: pure helpers for the OpenAI Responses API (tool definitions, allowed_tools choice, argument parsing, function_call_output, cached tokens, error mapping)
+├── modes.py          # exists: select_mode() (regex rules), FORCED_TOOLS / REQUIRED_TOOLS / required_tools() and build_system_prompt() (system.md + the mode file, 12-char hash)
 ├── mcp_client.py     # exists: McpClient, launches the MCP server over stdio, lists and calls tools
 └── prompts/
     ├── system.md     # exists: main system prompt
@@ -96,17 +100,19 @@ backend/app/agent/
 ```
 mcp_server/
 ├── server.py                  # exists: registers all tools, serves over stdio
-├── config.py                  # exists: settings from the root .env (weather and Gemini keys, Redis URL)
+├── config.py                  # exists: settings from the root .env (OpenAI settings, MongoDB, Keycloak, audit log; weather and other tool keys are in mcp_server/config.py)
 ├── tools/                     # One file per tool
 │   ├── weather.py             # exists: get_weather(location), validated
 │   ├── routes_tool.py         # exists: get_route(points, mode), driving only, up to 10 points, map points only (no distances or times), Redis cache (6 hours)
 │   ├── geocode_tool.py        # exists: geocode_places(names, context), up to 12 places, Redis cache (30 days), 1 request per second
-│   └── web_search.py          # exists: web_search(query), Gemini Google Search grounding, cached, validated
+│   ├── images_tool.py         # exists: get_place_images(place, region, count), three searches (landmark, temple, landscape), people and place filters, up to 3 Pexels photos with credit, Redis cache images:v2: (24 hours, found=true only)
+│   └── web_search.py          # exists: web_search(query), OpenAI built-in web search, validated, capped, sources returned, cached 3 hours
 ├── tests/
 │   ├── test_weather.py        # exists: weather tool and registration tests
-│   ├── test_web_search.py     # exists: web search tool and registration tests (Gemini and Redis faked)
+│   ├── test_web_search.py     # exists: web search tool and registration tests (OpenAI and Redis faked)
 │   ├── test_routes.py         # exists: route tool and registration tests (HTTP and Redis faked)
 │   ├── test_geocode.py        # exists: geocode tool and registration tests (HTTP and Redis faked)
+│   ├── test_images.py         # exists: image tool and registration tests (HTTP and Redis faked)
 │   └── test_no_key_in_logs.py # exists: API key must never appear in logs
 ├── pytest.ini                 # exists
 ├── requirements.txt           # exists
@@ -121,12 +127,12 @@ mcp_server/
 frontend/
 ├── reference/                 # exists: README.md only (screenshots are git-ignored design references, never shipped)
 ├── src/
-│   ├── components/            # exists: NavBar, AuthModal, HomeDashboard, ChatWindow, MessageList, MessageBubble, ChatInput, VoiceButton, Disclaimer. (to add: MapView, ItineraryView)
-│   ├── pages/                 # exists: Home (public landing: sunset hero + destination cards), AppHome (app page at /app, for guests and logged-in users), Chat, Explore and SavedTrips (placeholders, no longer linked from the public site). Login.jsx is unused: AuthModal replaced it (Keycloak sign-in planned)
+│   ├── components/            # exists: NavBar, HomeDashboard, PlacePanel (Explore side panel), ImageRow (photos under a chat reply), ChatSplit (two-column chat + map layout, owns the panel state), MapPanel (the map panel: a right-hand column on desktop, a full-screen overlay on phones), PlaceMap (the Leaflet map inside it), mapData.js (pure helpers for the map), ChatWindow, MessageList, MessageBubble, ChatInput, VoiceButton, Disclaimer. (to add: ItineraryView). tests/map-panel.test.mjs: exists, Node tests for the map panel
+│   ├── pages/                 # exists: Home (public landing: sunset hero + destination cards), AppHome (app page at /app, for guests and logged-in users), Chat, Explore (the Explore section of /app: search box, place grid, side panel; UI only with a mock search) and SavedTrips (placeholder, no longer linked from the public site). Login.jsx is unused: AuthModal replaced it (Keycloak sign-in planned)
 │   ├── api/                   # exists: client.js, chat.js (POST /chat)
-│   ├── data/                  # exists: places.js (hardcoded places and chips for the /app Home dashboard), mockReturningUser.js (MOCK data, TODO until the backend has endpoints)
+│   ├── data/                  # exists: places.js (hardcoded places, chips and a mock place search for the /app Home dashboard and Explore page), mockReturningUser.js (MOCK data, TODO until the backend has endpoints)
 │   ├── auth/                  # exists: session.js (Keycloak sign-in, guest session id, auth headers)
-│   ├── hooks/                 # exists: useAuth, useChat, useVoice. (to add: streaming hook, needs SSE in the backend)
+│   ├── hooks/                 # exists: useAuth, useChat, chatMemory.js (pure memory rules), useVoice. (to add: streaming hook, needs SSE in the backend)
 │   ├── App.jsx                # exists
 │   ├── main.jsx               # exists
 │   └── styles.css             # exists (not in the original plan)

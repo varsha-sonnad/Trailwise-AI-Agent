@@ -14,6 +14,8 @@ BASE_URL = "https://route.example.test"
 A = [29.9457, 78.1642]  # lat, lng
 B = [30.0869, 78.2676]
 C = [30.3165, 78.0322]
+# A Redis address with a password in it, to prove that neither the address nor the password ever reaches the logs.
+REDIS_URL = "redis://redisuser:secretpw@cache.example.test:6379/0"
 
 
 def osrm(coordinates, **extra):
@@ -64,7 +66,8 @@ class FakeClient:
 class FakeRedis:
     """Stand-in for a Redis client: a dict with get and set, and a log of every set call."""
 
-    def __init__(self, broken=False):
+    def __init__(self, broken=False, error=None):
+        self.error = error  # what a broken Redis raises (a plain ConnectionError by default)
         self.data = {}
         self.sets = []  # (key, ex)
         self.broken = broken
@@ -72,12 +75,12 @@ class FakeRedis:
 
     async def get(self, key):
         if self.broken:
-            raise ConnectionError("redis down")
+            raise self.error or ConnectionError("redis down")
         return self.data.get(key)
 
     async def set(self, key, value, ex=None):
         if self.broken:
-            raise ConnectionError("redis down")
+            raise self.error or ConnectionError("redis down")
         self.sets.append((key, ex))
         self.data[key] = value
         return True
@@ -90,8 +93,9 @@ class FakeRedis:
 def env(monkeypatch):
     """Fake settings, a fake Redis, no waiting. Returns helpers to install a fake HTTP client."""
     monkeypatch.setattr(routes_tool.get_settings(), "routing_base_url", BASE_URL)
+    monkeypatch.setattr(routes_tool.get_settings(), "redis_url", REDIS_URL)  # Redis is "set": tests never depend on the real .env
     fake_redis = FakeRedis()
-    monkeypatch.setattr(routes_tool.redis, "from_url", lambda url: fake_redis)
+    monkeypatch.setattr(routes_tool.redis, "from_url", lambda url, **kw: fake_redis)
     sleeps = []
 
     async def fake_sleep(seconds):
@@ -112,7 +116,7 @@ def env(monkeypatch):
             return self.client
 
         def use_redis(self, replacement):
-            monkeypatch.setattr(routes_tool.redis, "from_url", lambda url: replacement)
+            monkeypatch.setattr(routes_tool.redis, "from_url", lambda url, **kw: replacement)
             return replacement
 
     return Env()
@@ -466,7 +470,7 @@ async def test_redis_down_still_works_without_the_cache_and_warns_once(env, capl
 
 
 async def test_a_bad_redis_url_does_not_break_the_tool(env, monkeypatch):
-    def broken_from_url(url):
+    def broken_from_url(url, **kw):
         raise ValueError("bad url with a password in it")
 
     monkeypatch.setattr(routes_tool.redis, "from_url", broken_from_url)
@@ -479,6 +483,71 @@ async def test_the_redis_connection_is_closed(env):
     env.http(osrm(GEOMETRY))
     await get_route([A, B])
     assert env.redis.closed is True
+
+
+# ---------------------------------------------------------------- Redis is optional
+
+
+@pytest.mark.parametrize("unset", ["", "   "])
+async def test_redis_url_not_set_skips_the_cache_silently_and_still_works(env, monkeypatch, caplog, unset):
+    monkeypatch.setattr(routes_tool.get_settings(), "redis_url", unset)
+
+    def no_client_allowed(*args, **kwargs):
+        raise AssertionError("no Redis client may even be created when REDIS_URL is not set")
+
+    monkeypatch.setattr(routes_tool.redis, "from_url", no_client_allowed)
+    client = env.http(osrm(GEOMETRY), osrm(GEOMETRY))
+    with caplog.at_level(logging.DEBUG):
+        first = await get_route([A, B])
+        second = await get_route([A, B])
+    assert first["found"] is True and second["found"] is True
+    assert len(client.calls) == 2  # no cache: the second call went to the service again
+    assert "redis" not in caplog.text.lower()  # not a warning, not even a debug line: silence
+
+
+@pytest.mark.parametrize(
+    "error",
+    [None, OSError("network unreachable"), TimeoutError("timed out")],
+    ids=["connection refused", "os error", "timeout"],
+)
+async def test_redis_set_but_unreachable_logs_one_short_warning_per_call_and_still_works(env, caplog, error):
+    env.use_redis(FakeRedis(broken=True, error=error))
+    client = env.http(osrm(GEOMETRY), osrm(GEOMETRY))
+    with caplog.at_level(logging.DEBUG):
+        first = await get_route([A, B])
+        after_first = [r for r in caplog.records if "Redis" in r.getMessage()]
+        second = await get_route([A, B])  # a new call: one more warning (nothing was cached, so it asks the service again)
+    assert first["found"] is True and second["found"] is True  # works without the cache
+    assert len(client.calls) == 2
+    warnings = [r for r in caplog.records if "Redis" in r.getMessage()]
+    assert len(after_first) == 1 and len(warnings) == 2  # one warning per tool call, even though get and set both failed
+    assert all(r.levelno == logging.WARNING and len(r.getMessage()) < 80 for r in warnings)  # short, and a warning
+    # The address, the user name and the password never reach the log, and nor does the error text.
+    for text in ("secretpw", "redisuser", "cache.example.test", "redis://", "network unreachable", "timed out"):
+        assert text not in caplog.text
+
+
+async def test_a_reachable_redis_logs_no_warning(env, caplog):
+    env.http(osrm(GEOMETRY))
+    with caplog.at_level(logging.DEBUG):
+        result = await get_route([A, B])
+    assert result["found"] is True
+    assert "redis" not in caplog.text.lower()
+
+
+async def test_the_redis_client_gets_short_timeouts_so_it_cannot_hold_a_tool_call(env, monkeypatch):
+    seen = {}
+
+    def spy(url, **kwargs):
+        seen["url"], seen["kwargs"] = url, kwargs
+        return env.redis
+
+    monkeypatch.setattr(routes_tool.redis, "from_url", spy)
+    env.http(osrm(GEOMETRY))
+    await get_route([A, B])
+    assert seen["url"] == REDIS_URL
+    assert seen["kwargs"] == {"socket_connect_timeout": 2.0, "socket_timeout": 2.0}
+    assert routes_tool.REDIS_TIMEOUT_SECONDS == 2.0
 
 
 # ---------------------------------------------------------------- logging and registration

@@ -13,3 +13,7 @@ backend.zip
 # UI reference screenshots (local only); keep the README that explains them
 frontend/reference/*
 !frontend/reference/README.md
+
+# Local-testing debug log folder and the compose override that mounts it (see docker-compose.override.yml)
+debug-logs/
+docker-compose.override.yml

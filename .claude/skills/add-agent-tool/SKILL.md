@@ -1,6 +1,6 @@
 ---
 name: add-agent-tool
-description: Workflow for adding a new tool the Gemini agent can call in Trailwise (weather, places, images, routes, transport or email). Use whenever asked to create, add or change an agent tool or an external API integration.
+description: Workflow for adding a new tool the OpenAI agent can call in Trailwise (weather, places, images, routes, transport or email). Use whenever asked to create, add or change an agent tool or an external API integration.
 ---
 
 # Add an agent tool
@@ -19,7 +19,7 @@ Follow these steps in order. The rules referred to are in `CLAUDE.md`.
 7. **Transport tools** (rule 4): return a timing or price only if the source returned it. Include a "verify before travel" disclaimer in the result.
 8. **Secrets** (rule 6): read the API key from `app/config.py` settings. Add the key name with a fake value to `.env.example`. Never hardcode it. Never log URLs, headers or params that carry a key: `httpx` logs request URLs at INFO, so the `httpx` and `httpcore` loggers stay at WARNING (set once in `mcp_server/server.py`), and the tool's own logs record only status codes. Add a test that the key is absent from captured logs (see `mcp_server/tests/test_no_key_in_logs.py`).
 9. **Fail safely**: set a timeout, return a clear error object instead of raising into the agent loop, and never let one failed tool crash the whole request.
-10. Register the tool with the agent using Gemini function calling: a name, a short description, and a parameter schema.
+10. Register the tool in `mcp_server/server.py` with a name, a short description in the 1/2/3 format (what it does and returns, when to call, when NOT to call) and a parameter schema. The agent discovers it from the MCP server and turns it into an OpenAI function tool (`backend/app/agent/openai_adapter.py`), so no agent code changes unless the tool must be forced on round 1 (`FORCED_TOOLS` in `agent/modes.py`).
 
 ## Finishing
 11. Add tests in `backend/tests/` that mock the external API and the cache. Cover a cache hit, a cache miss, bad arguments and an API failure. Run `pytest` from `backend/`.

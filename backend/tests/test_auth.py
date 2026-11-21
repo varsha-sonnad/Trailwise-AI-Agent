@@ -133,7 +133,7 @@ def test_keycloak_down_is_401(client, monkeypatch, private_key):
 def test_chat_rejects_bad_token_but_allows_guest_and_anonymous(client, private_key, monkeypatch):
     """/chat: a bad token is 401, a guest id or no credentials still work, a bad session id is 400."""
 
-    async def fake_run_agent(message):
+    async def fake_run_agent(message, **memory):
         return "ok"
 
     monkeypatch.setattr("app.api.chat.run_agent", fake_run_agent)

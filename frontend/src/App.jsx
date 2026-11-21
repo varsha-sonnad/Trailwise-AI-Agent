@@ -1,11 +1,10 @@
-// App.jsx: the app shell: the nav bar (public site only), the current page, the login pop-up and the disclaimer.
+// App.jsx: the app shell: the nav bar (public site only), the current page and the disclaimer.
 // There is no router library. Two small pieces of state decide what to show: the URL path ("/" is the public
 // site, "/app" is the app page, open to guests and to signed-in users, handled with the browser's History API) and,
 // under "/", which page (the home page or the chat).
 // The conversation (useChat) is held here so it survives switching pages.
 
 import { useCallback, useEffect, useState } from "react";
-import AuthModal from "./components/AuthModal";
 import Disclaimer from "./components/Disclaimer";
 import NavBar from "./components/NavBar";
 import { useAuth } from "./hooks/useAuth";
@@ -19,12 +18,10 @@ export default function App() {
   const [path, setPath] = useState(window.location.pathname);
   // Which page is showing under "/": "home" or "chat" (the guest chat).
   const [page, setPage] = useState("home");
-  // Whether the login pop-up is open.
-  const [authOpen, setAuthOpen] = useState(false);
   // The conversation, shared by the Home hero input, the Chat page and the logged-in page.
-  const { messages, pending, send } = useChat();
+  const { messages, pending, send, reset } = useChat();
   // Who is signed in (a Keycloak user, or null for a guest); ready = the session check has finished.
-  const { user, ready, login, logout, register } = useAuth();
+  const { user, ready, login, logout } = useAuth();
   // Text typed in the hero search box, handed to the chat input on /app (it is only pre-filled, never sent).
   // It lives in React state only: nothing is stored in the browser.
   const [draft, setDraft] = useState("");
@@ -66,25 +63,18 @@ export default function App() {
     document.querySelector(".page")?.scrollTo({ top: 0 });
   }
 
-  // "Plan a Trip" (header) and "Plan it" (hero): go straight to /app, as a guest if nobody is logged in. No pop-up.
-  // Any text typed in the hero search box is pre-filled in the chat input there.
+  // A hero chip or "Start planning" / "Continue as guest": go straight to /app, as a guest if nobody is logged in.
+  // A chip's text is pre-filled in the chat input there.
   function planTrip(text) {
     setDraft(typeof text === "string" ? text : "");
     navigate("/app");
   }
 
-  // Log in mode, valid email: close the pop-up and go to the Keycloak login page
-  // (the email only pre-fills the form there; the password is typed on Keycloak, never in this app).
-  function handleLogin(email) {
-    setAuthOpen(false);
-    login(email);
-  }
-
-  // Sign up (the link inside the login pop-up): go straight to Keycloak's registration page, where the user enters
-  // their name, email and password once and confirms the email by mail. No email step happens here first.
-  function handleSignUp() {
-    setAuthOpen(false);
-    register();
+  // "Log in" (the header, and the guest's button inside /app): go straight to Keycloak's login page, which sends
+  // the user back to /app afterwards (keycloak.login with redirectUri, see auth/session.js). There is no pop-up and
+  // no sign-up link here: Keycloak's login page has its own Register link. The password is typed only on Keycloak.
+  function goToLogin() {
+    login();
   }
 
   // What fills the middle of the screen.
@@ -97,7 +87,8 @@ export default function App() {
         messages={messages}
         pending={pending}
         onSend={send}
-        onLogin={() => setAuthOpen(true)}
+        onNewChat={reset}
+        onLogin={goToLogin}
         onLogout={logout}
         draft={draft}
         onDraftUsed={() => setDraft("")}
@@ -106,7 +97,15 @@ export default function App() {
       <div className="placeholder">Loading...</div>
     );
   } else if (page === "home") {
-    content = <Home onStart={startPlanning} onPlan={planTrip} user={user} onOpenApp={() => navigate("/app")} />;
+    content = (
+      <Home
+        onStart={startPlanning}
+        onPlan={planTrip}
+        onGuest={() => planTrip()}
+        user={user}
+        onOpenApp={() => navigate("/app")}
+      />
+    );
   } else {
     content = <Chat messages={messages} pending={pending} onSend={send} />;
   }
@@ -121,8 +120,7 @@ export default function App() {
             setPage("home");
             setScrollToDestinations(true);
           }}
-          onPlanTrip={() => planTrip()}
-          onLogin={() => setAuthOpen(true)}
+          onLogin={goToLogin}
           onLogout={logout}
           user={user}
           overHero={page === "home"}
@@ -132,15 +130,6 @@ export default function App() {
       <main className="page">{content}</main>
 
       <Disclaimer />
-
-      {authOpen && (
-        <AuthModal
-          onClose={() => setAuthOpen(false)}
-          onLogin={handleLogin}
-          onSignUp={handleSignUp}
-          onGuest={() => setAuthOpen(false)}
-        />
-      )}
     </div>
   );
 }

@@ -190,11 +190,11 @@ def test_mongodb_uri_wins_over_the_alias(clean_settings):
 
 
 def test_other_missing_settings_keep_their_own_error(clean_settings):
-    """A missing Gemini key is still reported by pydantic itself, not as a MongoDB error."""
+    """A bad non-MongoDB setting is still reported by pydantic itself, not as a MongoDB error."""
     from pydantic import ValidationError
 
     clean_settings.setenv("MONGODB_URI", "mongodb+srv://u:p@c.example.mongodb.net/db")
-    clean_settings.delenv("GEMINI_API_KEY", raising=False)
+    clean_settings.setenv("MAX_MESSAGE_CHARS", "not-a-number")
     with pytest.raises(ValidationError):
         get_settings()
 

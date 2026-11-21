@@ -14,7 +14,7 @@ Follow these steps in order. The "Git Safety Rules" in `CLAUDE.md` always apply;
 4. If the current branch is `main`, do not commit there. Propose a new branch name and ask before creating it. Pushing to `main` needs separate, explicit approval.
 
 ## 2. Check for problems
-5. Look for secrets in the changes: `.env` files, API keys (Gemini, OpenWeather), tokens, passwords, audit logs (`logs/`, `*.log`) and virtual environments. Never stage them. Only `.env.example` (fake values) is allowed. Do not print secret values in the conversation; name the file and line only.
+5. Look for secrets in the changes: `.env` files, API keys (OpenAI, OpenWeather, Pexels), tokens, passwords, audit logs (`logs/`, `*.log`) and virtual environments. Never stage them. Only `.env.example` (fake values) is allowed. Do not print secret values in the conversation; name the file and line only.
 6. Run `pytest` in `backend/` and in `mcp_server/` (activate each venv first). If anything fails, stop and report the failures with the output. Do not push failing code unless the user explicitly says to.
 7. Check that `README.md` and `FILE_STRUCTURE.md` are updated for any new file or folder (rule 10).
 

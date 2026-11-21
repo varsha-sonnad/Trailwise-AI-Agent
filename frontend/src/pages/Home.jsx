@@ -1,11 +1,9 @@
-// Home.jsx: the public landing page: a sunset hero (serif headline, chat box, amber button) and a
-// "Popular destinations" section of image cards. "Plan it" opens the app page (/app) as a guest with the typed text
-// pre-filled; clicking a card opens the guest chat with a first message (App.jsx does the hand-over through onPlan
-// and onStart). The cards' pictures are small illustrations drawn here in SVG,
-// so there are no photo files, licences or outside requests.
-
-import { useState } from "react";
-import { MAX_MESSAGE_CHARS } from "../api/chat";
+// Home.jsx: the public landing page: a sunset hero (serif headline, a friendly robot avatar saying "Where to?", four
+// suggestion chips and one "Start planning" button with "as a guest" inside it) and a "Popular destinations"
+// section of image cards. A chip opens the app page (/app) as a guest with its text pre-filled in the chat input;
+// "Start planning" opens /app as a guest. Logging in is only in the header. Clicking a
+// destination card opens the guest chat with a first message (App.jsx does the hand-over through onPlan, onGuest and
+// onStart). The pictures are small illustrations drawn here in SVG, so there are no photo files or outside requests.
 
 // The illustrations: each is the inside of a 300 x 180 picture (sky, shapes). Ids are unique per picture.
 // Colors are only decoration; the cards contain no prices, times or other travel data.
@@ -132,20 +130,38 @@ const DESTINATIONS = [
   { id: "hampi", name: "Hampi", blurb: "Ancient ruins and boulder-strewn hills by the river." },
 ];
 
-// onStart(text?): open the chat; when text is given it is sent as the first message (used by the destination cards).
-// onPlan(text): "Plan it" in the hero: go to /app with the typed text pre-filled in the chat input.
-// user / onOpenApp(): when someone is signed in, a link into the app page (/app) is shown.
-export default function Home({ onStart, onPlan, user, onOpenApp }) {
-  const [text, setText] = useState("");
+// The four suggestion chips. Only a place and a kind of trip: no timings, prices or "live" claims.
+const CHIPS = ["Weekend in Goa", "Kedarnath trip", "Rajasthan in winter", "Kerala backwaters"];
 
-  // Take the typed text to the app page (it is pre-filled there, not sent) and clear the box.
-  function submit(event) {
-    event.preventDefault(); // stop the page from reloading
-    if (!text.trim()) return;
-    onPlan(text);
-    setText("");
-  }
+// The agent's avatar: an original, friendly robot face in amber and brown (inline SVG, no image file).
+function AgentAvatar() {
+  return (
+    <svg className="agent-avatar" viewBox="0 0 80 80" role="img" aria-label="Trailwise assistant" focusable="false">
+      {/* antenna */}
+      <path d="M40 15 V8" stroke="#3a1d12" strokeWidth="3" strokeLinecap="round" />
+      <circle cx="40" cy="7" r="4" fill="#f59e0b" stroke="#3a1d12" strokeWidth="2" />
+      {/* ears */}
+      <rect x="5" y="34" width="8" height="18" rx="4" fill="#c2410c" stroke="#3a1d12" strokeWidth="2.5" />
+      <rect x="67" y="34" width="8" height="18" rx="4" fill="#c2410c" stroke="#3a1d12" strokeWidth="2.5" />
+      {/* head */}
+      <rect x="11" y="15" width="58" height="52" rx="18" fill="#f59e0b" stroke="#3a1d12" strokeWidth="3" />
+      {/* face plate, eyes and smile */}
+      <rect x="18" y="26" width="44" height="28" rx="12" fill="#3a1d12" />
+      <circle cx="31" cy="39" r="5" fill="#ffe3a3" />
+      <circle cx="49" cy="39" r="5" fill="#ffe3a3" />
+      <path d="M33 48 Q40 54 47 48" stroke="#ffe3a3" strokeWidth="3" fill="none" strokeLinecap="round" />
+      {/* cheeks */}
+      <circle cx="22" cy="58" r="3" fill="#ffb35c" />
+      <circle cx="58" cy="58" r="3" fill="#ffb35c" />
+    </svg>
+  );
+}
 
+// onStart(text?): open the chat with a first message (used by the destination cards).
+// onPlan(text): a chip: go to /app as a guest with that text pre-filled in the chat input.
+// onGuest(): "Start planning": go to /app as a guest.
+// user / onOpenApp(): when someone is signed in, "as a guest" is not shown in the button and a link into the app page is.
+export default function Home({ onStart, onPlan, onGuest, user, onOpenApp }) {
   return (
     <>
       <section className="hero">
@@ -156,19 +172,30 @@ export default function Home({ onStart, onPlan, user, onOpenApp }) {
             <span className="hero-line">We’ll plan the{"\u00a0"}trail.</span>
           </h2>
           <p className="hero-sub">Chat about where you want to go, and get weather, routes and a day-by-day plan.</p>
-          <form className="hero-form" onSubmit={submit}>
-            <input
-              type="text"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              maxLength={MAX_MESSAGE_CHARS}
-              placeholder="Ask Trailwise"
-              aria-label="Where do you want to go?"
-            />
-            <button type="submit" disabled={!text.trim()}>
-              Plan it
+          {/* The agent: avatar, a greeting, suggestion chips, then the two buttons. */}
+          <div className="agent">
+            <AgentAvatar />
+            <p className="agent-greeting">Where to?</p>
+            <ul className="chips" aria-label="Trip ideas">
+              {CHIPS.map((chip) => (
+                <li key={chip}>
+                  <button type="button" className="chip" onClick={() => onPlan(chip)}>
+                    {chip}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {/* One button: "Start planning" with a small "as a guest" line inside it (for a visitor who is not signed in). */}
+            <button
+              type="button"
+              className="hero-primary"
+              onClick={onGuest}
+              aria-label={user ? undefined : "Start planning as a guest"}
+            >
+              Start planning
+              {!user && <span className="hero-primary-sub">as a guest</span>}
             </button>
-          </form>
+          </div>
           {user && (
             <button type="button" className="hero-app-link" onClick={onOpenApp}>
               Go to your app, {user.name.split(" ")[0]} →

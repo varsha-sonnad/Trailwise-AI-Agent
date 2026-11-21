@@ -37,11 +37,16 @@ MIN_INTERVAL_SECONDS = 1.0
 THROTTLE_POLL_SECONDS = 0.1
 # Give up on one request after this many seconds.
 HTTP_TIMEOUT_SECONDS = 10.0
+# Redis is optional and must never slow a tool down: connect and reply timeouts, in seconds.
+REDIS_TIMEOUT_SECONDS = 2.0
 # Retries after the first attempt, with the waits before them (seconds). Only for timeouts, network errors, 429 and 5xx.
 MAX_RETRIES = 2
 RETRY_DELAYS_SECONDS = (1.0, 2.0)
 # Named in every result, as the OpenStreetMap data licence asks for attribution.
 SOURCE = "OpenStreetMap Nominatim"
+# The map zoom hint for ONE found place: city level (the usual range is 10 to 12). With several places a map should fit
+# them all instead, so no hint is given. There is no map in the app yet; this is the value a future map view should use.
+CITY_ZOOM = 11
 
 
 async def _sleep(seconds: float) -> None:
@@ -111,20 +116,29 @@ def _cache_key(name: str, context: str) -> str:
 class _Store:
     """The Redis connection for one tool call: a cache and the shared rate-limit slot.
 
-    Redis is an optimisation, not a requirement: any Redis problem is logged once and treated as a cache miss and a
-    missing shared slot, and the tool carries on (with an in-process timer instead of the shared slot).
+    Redis is an optimisation, not a requirement. If REDIS_URL is not set, Redis is not used at all and nothing is
+    logged. If it is set but cannot be reached, ONE short warning is logged per tool call (no address, no password),
+    the problem is treated as a cache miss and a missing shared slot, and the tool carries on (with an in-process
+    timer instead of the shared slot).
     """
 
     def __init__(self, url: str):
         self.warned = False
+        self.client = None
+        if not url or not url.strip():
+            # REDIS_URL is not set: Redis is simply not used. Skip the cache silently, with no warning at all.
+            self.warned = True
+            return
         try:
-            self.client = redis.from_url(url)
+            self.client = redis.from_url(
+                url.strip(), socket_connect_timeout=REDIS_TIMEOUT_SECONDS, socket_timeout=REDIS_TIMEOUT_SECONDS
+            )
         except Exception:  # noqa: BLE001 - a bad URL must not break the tool
             self.client = None
             self._warn()
 
     def _warn(self) -> None:
-        """Log (once per call) that Redis cannot be used. No URL or error text, which could hold a password."""
+        """Log ONE short warning per tool call that Redis is set but cannot be used. No URL, password or error text."""
         if not self.warned:
             logger.warning("geocode: Redis unavailable, continuing without the cache")
             self.warned = True
@@ -262,7 +276,7 @@ async def geocode_places(names: list[str], context: str = "") -> dict:
     """Find the coordinates of up to 12 places in India, e.g. names ["Haridwar", "Rishikesh"] with context "Uttarakhand, India".
 
     Returns {"ok": True, "places": [{"name", "lat", "lng", "found"}, ...], "source": ...}, one entry per name in the
-    same order. found=False means no match (lat and lng are null). An entry with "error": "unavailable" means the
+    same order, plus "zoom": 11 (city level) when exactly one place was asked for and found. found=False means no match (lat and lng are null). An entry with "error": "unavailable" means the
     lookup failed: it says nothing about whether the place exists. Coordinates are never guessed.
     """
     try:
@@ -322,4 +336,8 @@ async def _geocode(names: list[str], context: str) -> dict:
 
     # 4. One entry per requested name, in the order asked (a repeated name gets its own copy of the entry).
     places = [{**results[_cache_key(name, args.context)], "name": name} for name in args.names]
-    return {"ok": True, "places": places, "source": SOURCE}
+    result = {"ok": True, "places": places, "source": SOURCE}
+    # Exactly one distinct place, and it was found: add the city-level zoom hint for a map centred on it.
+    if len({_cache_key(name, args.context) for name in args.names}) == 1 and places[0]["found"]:
+        result["zoom"] = CITY_ZOOM
+    return result

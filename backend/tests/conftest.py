@@ -2,22 +2,38 @@
 
 import os
 
-# Give the tests a fake Gemini key so the app can start without a real one.
-# This must run before app.config is imported.
-os.environ.setdefault("GEMINI_API_KEY", "test-key")
+# Environment values must be set before app.config is imported.
 # Keep the audit log off in tests so they never write to the real log file (test_audit.py turns it on).
 os.environ.setdefault("AUDIT_LOG_ENABLED", "false")
+# The optional debug log is off too, whatever the real .env says (test_debug_log.py turns it on with a temp file).
+os.environ.setdefault("DEBUG_LOG_FILE", "false")
+os.environ.setdefault("LOG_MESSAGES", "false")
 # MONGODB_URI is required (the app will not start without it), so tests give it a fake value: a dead local port.
 # A test can therefore never reach the real Atlas cluster from the project's .env (an environment variable beats
 # the .env file), and no real connection is needed. Tests also replace the client with a fake (see below).
 os.environ.setdefault("MONGODB_URI", "mongodb://127.0.0.1:1/trailwise-test")
-# The Gemini model settings are pinned too, so tests do not depend on whatever model or fallback model the project's
-# .env names (a fallback model there changes how the retry tests behave). These are the app's own defaults.
-os.environ.setdefault("GEMINI_MODEL", "gemini-3.5-flash")
-os.environ.setdefault("GEMINI_FALLBACK_MODEL", "")
+
+# The OpenAI settings are pinned the same way: fake values, so a test never reads the real key or models from .env.
+os.environ.setdefault("OPENAI_API_KEY", "test-openai-key")
+os.environ.setdefault("OPENAI_MODEL", "test-model")
+os.environ.setdefault("OPENAI_FALLBACK_MODEL", "")
+os.environ.setdefault("OPENAI_TIMEOUT_SECONDS", "60")
 
 import asyncio  # noqa: E402
 import pytest  # noqa: E402 - must come after the environment is set up
+
+
+@pytest.fixture(autouse=True)
+def no_required_tools(monkeypatch):
+    """Switch the explore required-tools check off for every test by default.
+
+    The check forces an extra model round when the model skipped web_search, get_weather, geocode_places or
+    get_place_images, which would break the scripted replies of the tests that are about something else (retries,
+    fallback model, audit lines...). tests/test_explore_required.py puts the real setting back.
+    """
+    from app.agent import modes
+
+    monkeypatch.setattr(modes, "REQUIRED_TOOLS", {})
 
 
 class FakeAdmin:

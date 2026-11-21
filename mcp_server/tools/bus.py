@@ -1,15 +1,25 @@
-# bus.py: the bus tool. Takes a source city, a destination city and a journey date, and returns
-# available buses (operator, times, price, bus type, seats) from the Parse.bot redBus API.
-# Flow: validate the arguments -> look up both city IDs -> search buses -> return a shaped result (no cache yet).
-# Each search costs 3 Parse.bot calls (2 city lookups + 1 search); the plan allows about 100 calls a day.
+# bus.py: the bus tool. Takes a source city, a destination city and an OPTIONAL journey date, and returns available buses
+# (operator, times, price, bus type, seats) from the Parse.bot redBus API.
+# Flow: validate the arguments -> work out the date -> Redis cache first -> look up both city IDs -> search buses -> return
+# a shaped result that says which date was used.
+# No date given: the tool searches TOMORROW. The date is worked out here, in code (India time), never by the model. The
+# Parse.bot search always takes an explicit date (`doj`); no "no date" mode is used. The result says the date was assumed
+# (date_assumed) so the agent replies "showing results for <date>" and offers to check another date.
+# Each search costs 3 Parse.bot calls (2 city lookups + 1 search); the plan allows about 100 calls a day, so a successful
+# result is cached for 30 minutes (failures and "no buses" are never cached).
 # It never raises into the agent loop: every failure becomes {"ok": False, "error": ...}.
-# Prices and seats are third-party (scraped redBus) data, so every result carries a "verify" notice.
+# Prices and seats are third-party (scraped redBus) data and belong to the date searched, so every result says so.
+# TODO: the small Redis helper below (_Store) is another copy of the idea in the geocode, routes, images, web search and train
+# tools. Move all of them onto one shared cache helper later (noted in claudeprompts.md).
 
 import asyncio
+import hashlib
+import json
 import logging
 from datetime import date, datetime, timedelta, timezone
 
 import httpx
+import redis.asyncio as redis
 from pydantic import BaseModel, ValidationError, field_validator
 
 from config import get_settings
@@ -26,8 +36,14 @@ HTTP_TIMEOUT_SECONDS = 30.0
 MAX_BUSES = 20
 # Furthest ahead a journey can be searched, in days (redBus does not open sales much earlier).
 MAX_DAYS_AHEAD = 120
-# India Standard Time, used to decide what "today" is.
+# India Standard Time, used to decide what "today" and "tomorrow" are.
 IST = timezone(timedelta(hours=5, minutes=30))
+# A successful result is cached for exactly 30 minutes (a fixed constant: no environment variable for it).
+CACHE_TTL_SECONDS = 30 * 60
+# Cache keys start with this; bump the "v1" if the cached value's shape ever changes.
+CACHE_PREFIX = "buses:v1:"
+# Redis is optional and must never slow a tool down: connect and reply timeouts, in seconds.
+REDIS_TIMEOUT_SECONDS = 2.0
 # Notice attached to every result (CLAUDE.md rule 4).
 DISCLAIMER = (
     "Prices and seat counts come from a third-party copy of redBus and can be out of date. "
@@ -40,12 +56,17 @@ def _today() -> date:
     return datetime.now(IST).date()
 
 
+def _tomorrow() -> date:
+    """Tomorrow's date in India: the date searched when none was given. Worked out in code, never taken from the model."""
+    return _today() + timedelta(days=1)
+
+
 class BusArgs(BaseModel):
     """Arguments the model passes to the tool. Never trusted: validated here."""
 
     source_city: str
     destination_city: str
-    journey_date: str
+    journey_date: str | None = None  # optional: missing, null or blank means "no date given" (tomorrow is searched)
 
     @field_validator("source_city", "destination_city")
     @classmethod
@@ -61,8 +82,10 @@ class BusArgs(BaseModel):
 
     @field_validator("journey_date")
     @classmethod
-    def clean_date(cls, value: str) -> str:
-        """Require YYYY-MM-DD, today or later, and not more than MAX_DAYS_AHEAD days away."""
+    def clean_date(cls, value: str | None) -> str | None:
+        """No date (None or blank) stays None. A date must be YYYY-MM-DD, today or later, at most MAX_DAYS_AHEAD days away."""
+        if value is None or not value.strip():
+            return None
         value = value.strip()
         try:
             parsed = date.fromisoformat(value)
@@ -90,6 +113,95 @@ def _text(value, limit: int = 100) -> str:
 def _number(value):
     """Return the value only if it is a real number (not a bool or string), else None."""
     return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+class _Store:
+    """The Redis cache for one search. Redis is an optimisation, not a requirement. If REDIS_URL is not set, Redis is not
+    used at all and nothing is logged. If it is set but cannot be reached, ONE short warning is logged per search (no
+    address, no password), it is treated as a cache miss, and the tool carries on without it."""
+
+    def __init__(self, url: str):
+        self.warned = False
+        self.client = None
+        if not url or not url.strip():
+            self.warned = True  # REDIS_URL is not set: skip the cache silently, with no warning at all
+            return
+        try:
+            self.client = redis.from_url(url.strip(), socket_connect_timeout=REDIS_TIMEOUT_SECONDS, socket_timeout=REDIS_TIMEOUT_SECONDS)
+        except Exception:  # noqa: BLE001 - a bad URL must not break the tool
+            self.client = None
+            self._warn()
+
+    def _warn(self) -> None:
+        """Log ONE short warning per search that Redis is set but cannot be used. No URL, password or error text."""
+        if not self.warned:
+            logger.warning("buses: Redis unavailable, continuing without the cache")
+            self.warned = True
+
+    async def get(self, key: str):
+        """The cached JSON value, or None on a miss, a Redis problem or a damaged entry."""
+        if self.client is None:
+            return None
+        try:
+            raw = await self.client.get(key)
+        except Exception:  # noqa: BLE001
+            self.client = None
+            self._warn()
+            return None
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except ValueError:
+            return None
+
+    async def set(self, key: str, value) -> None:
+        """Cache a JSON value for CACHE_TTL_SECONDS (30 minutes). A Redis problem is ignored."""
+        if self.client is None:
+            return
+        try:
+            await self.client.set(key, json.dumps(value, ensure_ascii=False), ex=CACHE_TTL_SECONDS)
+        except Exception:  # noqa: BLE001
+            self.client = None
+            self._warn()
+
+    async def close(self) -> None:
+        """Close the Redis connection (errors ignored)."""
+        if self.client is not None:
+            try:
+                await self.client.aclose()
+            except Exception:  # noqa: BLE001
+                pass
+
+
+def _cache_key(source: str, destination: str, day: str) -> str:
+    """The Redis key for one search: a hash of the two cities (ignoring case and extra spaces) and the date."""
+    text = "|".join(" ".join(part.casefold().split()) for part in (source, destination, day))
+    return CACHE_PREFIX + hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _valid_cached(value, day: str) -> bool:
+    """True when a cached value still has the shape this tool writes, for the date asked (a damaged entry is a miss)."""
+    return (
+        isinstance(value, dict) and value.get("ok") is True and value.get("date") == day
+        and isinstance(value.get("buses"), list) and bool(value["buses"]) and all(isinstance(b, dict) and "operator" in b for b in value["buses"])
+        and isinstance(value.get("from"), str) and isinstance(value.get("to"), str)
+    )
+
+
+def _with_date_info(core: dict, assumed: bool) -> dict:
+    """The result for the agent: the searched data plus which date was used and whether the tool chose it."""
+    day = core["date"]
+    result = dict(core)
+    result["date_assumed"] = assumed
+    result["fares_note"] = (
+        f"Fares and seat counts are third-party (redBus copy) data for {day} only; they change by date and can be out of date."
+    )
+    result["message"] = (
+        f"No date was given, so this shows results for {day} (tomorrow). Tell the user \"Showing results for {day}\" and offer to check another date."
+        if assumed else f"Showing results for {day}."
+    )
+    return result
 
 
 def _headers(api_key: str) -> dict:
@@ -161,12 +273,13 @@ def _shape_bus(bus: dict) -> dict:
     }
 
 
-async def search_buses(source_city: str, destination_city: str, journey_date: str) -> dict:
-    """Find buses between two cities on a date, e.g. ("Bangalore", "Goa", "2026-11-20").
+async def search_buses(source_city: str, destination_city: str, journey_date: str | None = None) -> dict:
+    """Find buses between two cities on a date, e.g. ("Bangalore", "Goa", "2026-11-20"). The date is optional.
 
-    journey_date is YYYY-MM-DD, from today up to 120 days ahead. Returns operators, departure and
-    arrival times, bus types, fares in INR and available seats where the source gives them, or
-    {"ok": False, "error": ..., "message": ...} when it cannot. It cannot book anything.
+    journey_date is YYYY-MM-DD, from today up to 120 days ahead. With no date the tool searches TOMORROW (it works the
+    date out itself) and says so in the result (date_assumed). Returns operators, departure and arrival times, bus types,
+    fares in INR and available seats where the source gives them, or {"ok": False, "error": ..., "message": ...} when it
+    cannot. It cannot book anything.
     """
     # 1. Validate the model-supplied arguments.
     try:
@@ -174,53 +287,77 @@ async def search_buses(source_city: str, destination_city: str, journey_date: st
     except ValidationError:
         return _error(
             "invalid_arguments",
-            "Give two different city names and a journey date as YYYY-MM-DD, from today up to 120 days ahead.",
+            "Give two different city names and, optionally, a journey date as YYYY-MM-DD, from today up to 120 days ahead.",
         )
     if args.source_city.casefold() == args.destination_city.casefold():
         return _error("invalid_arguments", "The source and destination cities must be different.")
 
-    # 2. Needs an API key from the project-root .env.
-    api_key = get_settings().parsebot_api_key
+    # 2. The date: the one given, or tomorrow worked out here (never by the model). Searching tomorrow is always in range.
+    assumed = args.journey_date is None
+    day = _tomorrow().isoformat() if assumed else args.journey_date
+
+    # 3. Needs an API key from the project-root .env.
+    settings = get_settings()
+    api_key = settings.parsebot_api_key
     if not api_key:
         return _error("not_configured", "The bus service is not configured.")
 
-    # 3. Look up both city IDs, then search; every failure becomes an error object.
+    # 4. Cache first (Redis is optional): a hit costs no Parse.bot call at all.
+    store = _Store(settings.redis_url)
     try:
-        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
-            # Both lookups run together; collect both results so neither is left running if one fails.
-            lookups = await asyncio.gather(
-                _city_id(client, args.source_city, api_key),
-                _city_id(client, args.destination_city, api_key),
-                return_exceptions=True,
-            )
-            for lookup in lookups:
-                if isinstance(lookup, BaseException):
-                    raise lookup  # a _Failure is handled below; anything else is a real bug
-            from_id, to_id = lookups
-            data = await _get(
-                client,
-                "search_buses",
-                {"from_city_id": from_id, "to_city_id": to_id, "doj": args.journey_date, "limit": MAX_BUSES},
-                api_key,
-            )
-    except _Failure as failure:
-        return failure.error
+        key = _cache_key(args.source_city, args.destination_city, day)
+        cached = await store.get(key)
+        if _valid_cached(cached, day):
+            return _with_date_info(cached, assumed)
 
-    # 4. Keep only the fields we need and return them.
-    inventories = data.get("inventories")
-    if not isinstance(inventories, list) or not inventories:
-        return _error("no_buses_found", f"No buses found from {args.source_city} to {args.destination_city} on {args.journey_date}.")
-    buses = [_shape_bus(b) for b in inventories[:MAX_BUSES] if isinstance(b, dict)]
-    total = _number((data.get("metaData") or {}).get("totalCount"))
-    return {
-        "ok": True,
-        "from": args.source_city,
-        "to": args.destination_city,
-        "date": args.journey_date,
-        "total_buses_found": total if total is not None else len(buses),
-        "buses": buses,
-        "buses_truncated": (total or len(inventories)) > len(buses),
-        "currency": "INR",
-        "source": "redbus via parse.bot",
-        "disclaimer": DISCLAIMER,
-    }
+        # 5. Look up both city IDs, then search; every failure becomes an error object.
+        try:
+            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
+                # Both lookups run together; collect both results so neither is left running if one fails.
+                lookups = await asyncio.gather(
+                    _city_id(client, args.source_city, api_key),
+                    _city_id(client, args.destination_city, api_key),
+                    return_exceptions=True,
+                )
+                for lookup in lookups:
+                    if isinstance(lookup, BaseException):
+                        raise lookup  # a _Failure is handled below; anything else is a real bug
+                from_id, to_id = lookups
+                data = await _get(
+                    client,
+                    "search_buses",
+                    {"from_city_id": from_id, "to_city_id": to_id, "doj": day, "limit": MAX_BUSES},
+                    api_key,
+                )
+        except _Failure as failure:
+            return failure.error
+
+        # 6. Keep only the fields we need and return them.
+        inventories = data.get("inventories")
+        if not isinstance(inventories, list) or not inventories:
+            error = _error(
+                "no_buses_found",
+                f"No buses found from {args.source_city} to {args.destination_city} on {day}"
+                + (" (tomorrow, used because no date was given). Ask the user for another date." if assumed else "."),
+            )
+            error.update(date=day, date_assumed=assumed)  # not cached
+            return error
+        buses = [_shape_bus(b) for b in inventories[:MAX_BUSES] if isinstance(b, dict)]
+        total = _number((data.get("metaData") or {}).get("totalCount"))
+        core = {
+            "ok": True,
+            "from": args.source_city,
+            "to": args.destination_city,
+            "date": day,
+            "total_buses_found": total if total is not None else len(buses),
+            "buses": buses,
+            "buses_truncated": (total or len(inventories)) > len(buses),
+            "currency": "INR",
+            "source": "redbus via parse.bot",
+            "disclaimer": DISCLAIMER,
+        }
+        if buses:
+            await store.set(key, core)  # only a real success is cached
+        return _with_date_info(core, assumed)
+    finally:
+        await store.close()

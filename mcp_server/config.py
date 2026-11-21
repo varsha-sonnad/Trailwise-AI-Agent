@@ -1,10 +1,11 @@
-# config.py: loads the MCP server's settings (weather, Gemini, RailRadar and Parse.bot keys, SMTP settings, geocoding and routing services, Redis URL) from the project-root .env.
+# config.py: loads the MCP server's settings (weather, OpenAI search, RailRadar and Parse.bot keys, SMTP settings, geocoding, routing and Pexels photo services, Redis URL) from the project-root .env.
 # The MCP server is a separate service, so it has its own small settings class
 # instead of importing backend/app/config.py.
 
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The project-root .env file (one folder above mcp_server/).
@@ -14,18 +15,25 @@ ROOT_ENV = Path(__file__).resolve().parents[1] / ".env"
 class Settings(BaseSettings):
     """Settings for the MCP server. Values come from the environment or the project-root .env."""
 
-    # Read the root .env if present; ignore keys this server does not use (Gemini, MongoDB, ...).
+    # Read the root .env if present; ignore keys this server does not use (MongoDB, ...).
     model_config = SettingsConfigDict(env_file=ROOT_ENV, env_file_encoding="utf-8", extra="ignore")
 
     # OpenWeatherMap API key (env var OPENWEATHER_API_KEY). Empty means "not configured":
     # the tool then returns an error object instead of crashing the server at startup.
     openweather_api_key: str = ""
-    # Gemini API key (env var GEMINI_API_KEY, the same key the backend uses) for the web_search tool.
-    # Empty means "not configured": the tool returns an error object instead of crashing.
-    gemini_api_key: str = ""
-    # Model the web_search tool uses for Google Search grounding (env var GEMINI_SEARCH_MODEL).
-    # Change it if the chat model cannot do grounding on your key.
-    gemini_search_model: str = "gemini-3.5-flash"
+    # OpenAI API key (env var OPENAI_API_KEY, the same key the backend uses) for the web_search tool.
+    # Empty means "not configured": the tool returns an error object instead of crashing. Never logged.
+    openai_api_key: str = ""
+    # The model the web_search tool uses with OpenAI's built-in web search (env var OPENAI_SEARCH_MODEL). No default on
+    # purpose: model names change, and it must be a small model that supports web search. Empty means "not configured".
+    openai_search_model: str = ""
+    # How long ONE web_search attempt waits for OpenAI, in seconds (env var OPENAI_SEARCH_TIMEOUT_SECONDS, default 120). A
+    # timeout is retried once, and both attempts together are held to the agent's call limit minus a safety margin (below).
+    openai_search_timeout_seconds: float = Field(default=120.0, gt=0, le=600)
+    # The agent's time limit for one web_search call, in seconds (env var WEB_SEARCH_CALL_TIMEOUT_SECONDS, default 150; the backend
+    # reads the same variable). The tool keeps both of its attempts under this limit (minus 10 seconds), so it answers
+    # "timeout" itself before the agent gives up on it.
+    web_search_call_timeout_seconds: float = Field(default=150.0, gt=0, le=900)
     # RailRadar API key (env var RAILRADAR_API_KEY) for the train tool.
     # Empty means "not configured": the tool returns an error object instead of crashing.
     railradar_api_key: str = ""
@@ -55,8 +63,15 @@ class Settings(BaseSettings):
     # https://router.project-osrm.org (a public demo server for light use). Empty means "not configured":
     # the tool returns an error object instead of crashing.
     routing_base_url: str = ""
-    # Redis used as the cache (matches docker-compose.yml).
-    redis_url: str = "redis://localhost:6379/0"
+    # The Pexels photo API for the get_place_images tool (env vars PEXELS_BASE_URL, for example https://api.pexels.com/v1,
+    # and PEXELS_API_KEY). Either one empty means "not configured": the tool returns an error object instead of crashing.
+    # The key is sent only in the Authorization header and is never logged.
+    pexels_base_url: str = ""
+    pexels_api_key: str = ""
+    # Redis, used by the tools as a cache (env var REDIS_URL, for example redis://localhost:6379/0, or redis://redis:6379/0
+    # inside Docker). OPTIONAL: when it is not set (empty) the tools skip the cache silently and work without it.
+    # When it is set but Redis cannot be reached, each tool call logs one short warning (no address, no password).
+    redis_url: str = ""
 
 
 @lru_cache
