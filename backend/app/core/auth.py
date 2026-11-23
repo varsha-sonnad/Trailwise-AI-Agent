@@ -35,6 +35,8 @@ class Principal:
     id: str
     email: str | None = None
     name: str | None = None
+    # True only when the token says email_verified is exactly true (never inferred): emailing a trip needs it.
+    email_verified: bool = False
 
 
 def issuer() -> str:
@@ -148,7 +150,10 @@ async def get_optional_principal(
         except AuthError as exc:
             logger.info("rejected token: %s", exc)  # reason goes to the log only
             raise _unauthorized() from exc
-        return Principal(kind="user", id=claims["sub"], email=claims.get("email"), name=claims.get("name"))
+        return Principal(
+            kind="user", id=claims["sub"], email=claims.get("email"), name=claims.get("name"),
+            email_verified=claims.get("email_verified") is True,
+        )
     if x_session_id is not None:
         if not SESSION_ID_PATTERN.match(x_session_id):
             raise HTTPException(status_code=400, detail="Invalid session id.")
