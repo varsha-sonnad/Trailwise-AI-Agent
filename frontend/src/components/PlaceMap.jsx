@@ -14,7 +14,7 @@ import "leaflet/dist/leaflet.css";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
-import { OSM_ATTRIBUTION, cardModel, mapView, tileUrl, validPlaces, validRoute } from "./mapData";
+import { LEGS_CAPTION, OSM_ATTRIBUTION, cardModel, mapView, tileUrl, validLegs, validPlaces, validRoute } from "./mapData";
 
 // One element made with the given document (a parameter so the tests can pass a small fake); text always goes in as text.
 function el(doc, tag, className, text) {
@@ -53,7 +53,7 @@ export function buildCard(model, doc = document) {
 }
 
 // places, route: the reply's lists (checked again here); images: the reply's photos (for the card of the first pin).
-export default function PlaceMap({ places, route, images }) {
+export default function PlaceMap({ places, route, legs, images }) {
   const box = useRef(null);
 
   useEffect(() => {
@@ -65,7 +65,8 @@ export default function PlaceMap({ places, route, images }) {
     const onEnd = () => map && map.invalidateSize();
     const pins = validPlaces(places);
     const line = validRoute(route);
-    const view = mapView(pins, line);
+    const lines = validLegs(legs);
+    const view = mapView(pins, line, lines);
     if (!view || !box.current) return undefined;
 
     (async () => {
@@ -85,6 +86,11 @@ export default function PlaceMap({ places, route, images }) {
       map = L.map(box.current, { zoomControl: true });
       L.tileLayer(tileUrl(import.meta.env.VITE_MAP_TILE_URL), { attribution: OSM_ATTRIBUTION, maxZoom: 19 }).addTo(map);
       if (line.length > 0) L.polyline(line, { color: "#c2410c", weight: 4, opacity: 0.85 }).addTo(map);
+      // Road legs are solid; every other suggested connection (trek, pony, helicopter, train or bus link) is dashed.
+      lines.forEach((leg) =>
+        L.polyline(leg.points, leg.kind === "road"
+          ? { color: "#c2410c", weight: 4, opacity: 0.85 }
+          : { color: "#475569", weight: 3, opacity: 0.9, dashArray: "8 8" }).addTo(map));
 
       // Hovering opens the card where the device can hover; a tap opens it everywhere (Leaflet's own click on a bound popup).
       const canHover = typeof window.matchMedia === "function" && window.matchMedia("(hover: hover)").matches;
@@ -117,7 +123,14 @@ export default function PlaceMap({ places, route, images }) {
       if (panel) panel.removeEventListener("animationend", onEnd);
       if (map) map.remove();
     };
-  }, [places, route, images]);
+  }, [places, route, legs, images]);
 
-  return <div ref={box} className="map-canvas" role="region" aria-label="Map of the places in this reply" />;
+  // The caption only appears when the reply has dashed connections.
+  const hasSuggested = validLegs(legs).some((leg) => leg.kind === "other");
+  return (
+    <>
+      <div ref={box} className="map-canvas" role="region" aria-label="Map of the places in this reply" />
+      {hasSuggested && <p className="map-legs-caption">{LEGS_CAPTION}</p>}
+    </>
+  );
 }
