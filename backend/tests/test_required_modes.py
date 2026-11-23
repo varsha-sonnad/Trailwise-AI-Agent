@@ -97,7 +97,7 @@ def test_required_tools_per_mode():
 
 
 def test_the_prompts_have_the_new_rules_and_bumped_versions():
-    assert prompt_version("itinerary") == "trailwise.itinerary@6" and prompt_version("route") == "trailwise.route@6"
+    assert prompt_version("itinerary") == "trailwise.itinerary@6" and prompt_version("route") == "trailwise.route@7"
     itinerary, route = build_system_prompt("itinerary").text, build_system_prompt("route").text
     for tool in ("web_search", "get_weather", "geocode_places"):
         assert f"`{tool}`" in itinerary
@@ -543,7 +543,7 @@ async def test_the_timeout_reply_goes_through_the_chat_route_as_a_normal_reply(m
     monkeypatch.setattr(agent, "_generate", hang)
     with TestClient(app) as client:
         response = client.post("/chat", json={"message": "hi"})
-    assert response.status_code == 200 and response.json() == {"reply": REQUEST_TOO_LONG_REPLY, "images": [], "mode": "explore", "places": []}
+    assert response.status_code == 200 and response.json() == {"reply": REQUEST_TOO_LONG_REPLY, "images": [], "mode": "explore", "places": [], "legs": [], "saved": None}
 
 
 # ---------------------------------------------------------------- get_weather after geocode_places, with lat and lng

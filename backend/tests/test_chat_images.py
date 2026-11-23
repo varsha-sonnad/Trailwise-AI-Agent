@@ -79,7 +79,7 @@ def test_clean_images_of_anything_else_is_empty(raw):
 
 
 def test_the_response_model_defaults_to_no_images():
-    assert ChatResponse(reply="Hi").model_dump() == {"reply": "Hi", "images": [], "mode": None, "places": []}
+    assert ChatResponse(reply="Hi").model_dump() == {"reply": "Hi", "images": [], "mode": None, "places": [], "legs": [], "saved": None}
 
 
 # ---------------------------------------------------------------- the agent attaches the photos
@@ -240,7 +240,7 @@ def test_a_plain_string_reply_gives_an_empty_images_list(client, monkeypatch):
         return "Just text."
 
     monkeypatch.setattr("app.api.chat.run_agent", fake_run_agent)
-    assert client.post("/chat", json={"message": "hi"}).json() == {"reply": "Just text.", "images": [], "mode": None, "places": []}
+    assert client.post("/chat", json={"message": "hi"}).json() == {"reply": "Just text.", "images": [], "mode": None, "places": [], "legs": [], "saved": None}
 
 
 def test_the_route_checks_the_images_again_so_a_bad_one_never_reaches_the_browser(client, monkeypatch):
