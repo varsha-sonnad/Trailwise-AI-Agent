@@ -17,6 +17,8 @@ export const MAX_FIT_ZOOM = 13;
 // Limits, in line with what the backend sends (it sends at most 12 places).
 export const MAX_PLACES = 12;
 export const MAX_ROUTE_POINTS = 2000;
+// Map lines of one reply (the backend sends at most 8 legs of at most 300 points).
+export const MAX_LEGS = 8;
 
 // The tile address to use: the configured one if it is an https address (or http on localhost, for a local tile server) that
 // has the {z}, {x} and {y} placeholders; otherwise the default. Whatever is configured, the OpenStreetMap credit stays.
@@ -65,6 +67,23 @@ export function validRoute(route) {
   return points.length >= 2 ? points : [];
 }
 
+// The legs of a reply: [{ kind: "road" | "other", points }]. Only the two known kinds are kept, invalid points are dropped,
+// and a leg with fewer than two good points is dropped. Anything else is ignored, never repaired or invented.
+export function validLegs(legs) {
+  if (!Array.isArray(legs)) return [];
+  const good = [];
+  for (const leg of legs) {
+    if (!leg || (leg.kind !== "road" && leg.kind !== "other")) continue;
+    const points = validRoute(leg.points);
+    if (points.length >= 2) good.push({ kind: leg.kind, points });
+    if (good.length >= MAX_LEGS) break;
+  }
+  return good;
+}
+
+// The caption under the map when it has suggested connections (dashed legs). A constant of ours, never reply text.
+export const LEGS_CAPTION = "Solid lines: roads. Dashed lines: suggested connections, verify before travel.";
+
 // True when a reply has at least one place that can be pinned: only then the "Show map" button and the panel exist.
 export function hasMap(places) {
   return validPlaces(places).length > 0;
@@ -72,9 +91,9 @@ export function hasMap(places) {
 
 // How to frame the map. One place and no route: centre on it at zoom 11. Anything else: fit the bounds of every pin and route
 // point. Several pins that sit on exactly the same spot count as one place. null when there is nothing to show.
-export function mapView(places, route) {
+export function mapView(places, route, legs) {
   const pins = validPlaces(places);
-  const line = validRoute(route);
+  const line = [...validRoute(route), ...validLegs(legs).flatMap((leg) => leg.points)];
   const all = [...pins.map((p) => [p.lat, p.lng]), ...line];
   if (all.length === 0) return null;
   const lats = all.map((p) => p[0]);

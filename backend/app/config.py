@@ -52,6 +52,15 @@ class Settings(BaseSettings):
     # Redis connection (matches the service in docker-compose.yml).
     redis_url: str = "redis://localhost:6379/0"
 
+    # SMTP, used to email a saved trip to the signed-in user (POST /trips/{id}/email). The same names as the MCP server's
+    # (SMTP_EMAIL, SMTP_PASSWORD, SMTP_HOST, SMTP_PORT, SMTP_STARTTLS). The defaults match Mailpit in docker-compose.yml
+    # (no login, no TLS). An empty or invalid SMTP_EMAIL means email is not configured. The password is never logged.
+    smtp_email: str = ""
+    smtp_password: str = ""
+    smtp_host: str = "localhost"
+    smtp_port: int = 1025
+    smtp_starttls: bool = False
+
     # Keycloak (authentication). KEYCLOAK_URL is the public address the browser uses; it is also the base of the
     # token issuer, so it must match what Keycloak puts in tokens. KEYCLOAK_INTERNAL_URL is where THIS server
     # fetches Keycloak's public keys when that differs (in Docker: http://keycloak:8080). Empty = use KEYCLOAK_URL.

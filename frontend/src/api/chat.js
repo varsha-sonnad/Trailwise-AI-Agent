@@ -38,5 +38,8 @@ export async function sendMessage(message, memory = {}) {
     // The route line for the map, when a response has one ([[lat, lng], ...]). The backend does not send one yet; the map draws
     // it only when it is there (and valid), and never makes one up.
     route: Array.isArray(data.route) ? data.route : [],
+    // The map lines: [{ kind: "road" | "other", points: [[lat, lng], ...] }]. Roads are drawn solid, other suggested
+    // connections dashed. The map checks every leg again and draws nothing that is not valid.
+    legs: Array.isArray(data.legs) ? data.legs : [],
   };
 }

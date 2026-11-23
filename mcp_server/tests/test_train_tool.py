@@ -260,6 +260,13 @@ async def test_an_unknown_city_is_station_not_found_and_names_the_city(env):
     assert result["error"] == "station_not_found" and "Atlantis" in result["message"]
 
 
+async def test_station_not_found_says_which_end_failed(env):
+    """failed_end tells the agent whether the destination (the gateway-flow signal) or the source had no station."""
+    env.api({"Atlantis": lookup_reply(), "Pune": PUNE})
+    assert (await search_trains("Pune", "Atlantis"))["failed_end"] == "destination"
+    assert (await search_trains("Atlantis", "Pune"))["failed_end"] == "source"
+
+
 async def test_a_lookup_404_is_station_not_found(env):
     env.api({"Pune": httpx.Response(404), "Mumbai": MUMBAI})
     assert (await search_trains("Pune", "Mumbai"))["error"] == "station_not_found"

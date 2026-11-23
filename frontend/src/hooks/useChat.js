@@ -22,8 +22,8 @@ export function useChat() {
   const generation = useRef(0);
 
   // Add one message to the end of the conversation.
-  const addMessage = useCallback((role, text, images = [], places = [], route = []) => {
-    setMessages((current) => [...current, { id: nextId.current++, role, text, images, places, route }]);
+  const addMessage = useCallback((role, text, images = [], places = [], route = [], legs = [], mode = null) => {
+    setMessages((current) => [...current, { id: nextId.current++, role, text, images, places, route, legs, mode }]);
   }, []);
 
   // Send a user message: show it, call the backend with the memory, then show the reply or an error.
@@ -41,10 +41,10 @@ export function useChat() {
       addMessage("user", message);
       setPending(true);
       try {
-        const { reply, images, mode, places, route } = await sendMessage(message, sent);
+        const { reply, images, mode, places, route, legs } = await sendMessage(message, sent);
         if (mine !== generation.current) return; // "New chat" was pressed while waiting
         memory.current = nextMemory(memory.current, { mode, places });
-        addMessage("bot", reply, images, places, route);
+        addMessage("bot", reply, images, places, route, legs, mode);
       } catch (err) {
         if (mine !== generation.current) return;
         // ApiError messages are already friendly; anything else gets a generic line.

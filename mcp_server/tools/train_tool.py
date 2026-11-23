@@ -462,7 +462,12 @@ def _failure(status: str, args: SearchArgs, which: str | None = None) -> dict:
     if status == "not_found":
         city = {"source": args.source_city, "destination": args.destination_city}.get(which or "", "")
         shown = f" for '{city}'" if city else ""
-        return _error("station_not_found", f"No station found{shown} in this data source. Check the spelling or try a nearby bigger city.")
+        error = _error("station_not_found", f"No station found{shown} in this data source. Check the spelling or try a nearby bigger city.")
+        # Which end had no station ("source" or "destination"): a missing destination is the signal for the gateway flow
+        # (a remote or trek-only place), see prompts/route.md and agent.py.
+        if which:
+            error["failed_end"] = which
+        return error
     return _error("unavailable", UNAVAILABLE_MESSAGE)
 
 

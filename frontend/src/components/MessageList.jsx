@@ -44,6 +44,8 @@ export default function MessageList({ messages, pending }) {
           text={m.text}
           images={m.images}
           places={m.places}
+          mode={m.mode}
+          legs={m.legs}
           onShowMap={showMap && !mapOpen ? () => showMap(m, true) : undefined}
         />
       ))}

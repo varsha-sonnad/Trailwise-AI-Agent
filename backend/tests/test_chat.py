@@ -27,7 +27,7 @@ def test_chat_returns_reply(client, monkeypatch):
     monkeypatch.setattr("app.api.chat.run_agent", fake_run_agent)
     r = client.post("/chat", json={"message": "  Plan Goa  "})
     assert r.status_code == 200
-    assert r.json() == {"reply": "Try Palolem beach.", "images": [], "mode": None, "places": []}  # a plain text reply carries no photos
+    assert r.json() == {"reply": "Try Palolem beach.", "images": [], "mode": None, "places": [], "legs": [], "saved": None}  # a plain text reply carries no photos
     assert seen["message"] == "Plan Goa"
 
 
