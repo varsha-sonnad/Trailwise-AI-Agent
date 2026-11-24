@@ -17,3 +17,29 @@ frontend/reference/*
 # Local-testing debug log folder and the compose override that mounts it (see docker-compose.override.yml)
 debug-logs/
 docker-compose.override.yml
+
+# Other .env files hold real settings; the committed templates stay tracked
+.env.*
+!.env.example
+!frontend/.env.example
+
+# Personal Claude Code settings (the shared .claude/settings.json stays tracked)
+.claude/settings.local.json
+
+# Python tool leftovers: packaging, type-check, lint and coverage output
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Frontend tool leftovers: local env files, coverage and the Vite cache
+*.local
+coverage/
+.vite/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

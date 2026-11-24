@@ -26,6 +26,8 @@ async def chat(
             history=[m.model_dump() for m in body.history],
             last_mode=body.last_mode,
             last_place=body.last_place.model_dump() if body.last_place else None,
+            # Already validated: only the three fixed-value fields. The agent turns them into one short fixed-template line.
+            preferences=body.preferences.model_dump() if body.preferences else None,
         )
     except AgentBusyError:
         # 503 = the AI service is overloaded (temporary), even after retries. Retry-After hints when to try again.

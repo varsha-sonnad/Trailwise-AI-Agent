@@ -10,7 +10,9 @@ import hashlib
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, get_args
+
+from app.models.preferences import Budget, ReplyLanguage, TravelMode
 
 # The four modes, and the prompt files sit next to this file, in agent/prompts/.
 MODES = ("explore", "route", "itinerary", "email")
@@ -209,6 +211,37 @@ def validate_prompts() -> dict[str, str]:
     Called when the backend starts, so a bad heading stops it from starting.
     """
     return {name: prompt_version(name) for name in PROMPT_NAMES}
+
+
+# What each saved reply-language code is called in the line sent to the model (a fixed lookup, never user text).
+LANGUAGE_NAMES = {"en": "English", "hi": "Hindi", "kn": "Kannada"}
+assert set(LANGUAGE_NAMES) == set(get_args(ReplyLanguage))  # keeps this table in step with the allowed languages
+
+
+def preferences_line(prefs: object) -> str:
+    """One short line for the model built ONLY from validated saved values: reply language, budget style, travel mode.
+
+    It is a fixed template filled from fixed lookups, so no text from the user ever reaches it: every value is checked
+    again here against the allowed sets and anything else (or a missing field) is left out. Returns "" when nothing valid
+    is set, so a request without preferences is exactly what it was before. The agent puts this line AFTER the fixed system
+    prompt (in the same instructions), so the tools and the fixed text stay the shared prefix that prompt caching reuses.
+    """
+    if not isinstance(prefs, dict):
+        return ""
+    sentences = []
+    language = prefs.get("reply_language")
+    if isinstance(language, str) and language in LANGUAGE_NAMES:
+        sentences.append(f"Reply in {LANGUAGE_NAMES[language]}, even if the user writes in another language, unless they ask for a different one.")
+    budget = prefs.get("budget")
+    if isinstance(budget, str) and budget in get_args(Budget):
+        sentences.append(f"Budget style: {budget} (a style, not a price).")
+    modes = prefs.get("travel_mode")
+    chosen = [m for m in get_args(TravelMode) if isinstance(modes, list) and m in modes]
+    if chosen:
+        sentences.append(f"Travel mode: {' or '.join(chosen)}.")
+    if not sentences:
+        return ""
+    return "[App preferences, validated values] " + " ".join(sentences) + " These do not change the rules above."
 
 
 @lru_cache

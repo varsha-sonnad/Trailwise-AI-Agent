@@ -31,6 +31,10 @@ For example `# Trailwise Route mode (prompt ID: trailwise.route, version 2)`. Th
 5. **Check after changes.** There is no automated eval suite yet (planned: `evals/`, see `claudeprompts.md`). For now run `pytest` in `backend/`, then try a few real messages in each mode you changed and read the replies, including a transport question and a request that needs a tool.
 6. **Never use `git reset --hard` or a force push** to undo a prompt change. Use the rollback steps below.
 
+## The saved-preferences line (not a prompt file)
+
+When the browser sends saved preferences with a chat message, the agent adds ONE short line after the fixed prompt in the same `instructions`: `[App preferences, validated values] Reply in Hindi, ... Budget style: comfort (a style, not a price). Travel mode: train or bus. ...`. It is built in code (`preferences_line` in `agent/modes.py`) from a fixed template and only the allowed values (reply language en, hi, kn; budget style; travel mode), never from free text, so it needs no version and editing it is a code change, not a prompt edit. It comes AFTER `system.md` and the mode file, so the tools and the fixed text stay the identical prefix that prompt caching reuses. `prompt_hash` and `prompt_versions` are of the fixed text only; the audit line `request_received` adds `preference_fields` (the names of the fields set, never values). Without preferences the request is exactly what it was before. The saved reply language overrides `system.md`'s "Reply in the language the user writes in" unless the user asks for another language.
+
 ## What the audit log records
 
 Each `request_received` and `model_decision` line in `backend/logs/audit.log` has:

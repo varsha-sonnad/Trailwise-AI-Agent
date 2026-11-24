@@ -15,6 +15,7 @@ from app.api.me import router as me_router
 from app.config import get_settings
 from app.core.debug_log import warn_if_debug_logging
 from app.core.mongo import create_client, ping
+from app.core.preferences import ensure_indexes
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ async def lifespan(app: FastAPI):
     # The client connects lazily, so a down database does not stop the app: warn and carry on. /ready reports it.
     if not await ping(client):
         logger.warning("MongoDB did not answer the startup ping; /ready will return 503 until it does")
+    await ensure_indexes(client[get_settings().mongo_db])  # unique index on Preferences.sub; failures are only logged
     try:
         yield
     finally:
@@ -45,7 +47,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,  # needed later for httpOnly cookie login
-        allow_methods=["GET", "POST", "DELETE"],
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["*"],
     )
 
@@ -62,7 +64,7 @@ def create_app() -> FastAPI:
 
     # Chat endpoint: POST /chat.
     app.include_router(chat_router)
-    # Who am I: GET /me (needs a Keycloak token).
+    # Who am I and saved preferences: GET /me, GET and PUT /me/preferences (need a Keycloak token).
     app.include_router(me_router)
 
     @app.get("/health")

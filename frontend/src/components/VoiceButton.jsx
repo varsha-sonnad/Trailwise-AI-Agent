@@ -2,12 +2,12 @@
 // The recognised text is handed to onText; the user reviews it and presses Send themselves.
 // If the browser has no speech recognition, a short note asks the user to type instead.
 
-import { useState } from "react";
-import { VOICE_LANGUAGES, useVoice } from "../hooks/useVoice";
+import { VOICE_LANGUAGES, useVoice, useVoiceLanguage } from "../hooks/useVoice";
 
 // onText(text): called with the recognised text. disabled: true while a reply is pending.
-export default function VoiceButton({ onText, disabled }) {
-  const [lang, setLang] = useState(VOICE_LANGUAGES[0].code);
+// replyLanguage: the saved reply language (en, hi, kn or null); the picker starts on it.
+export default function VoiceButton({ onText, disabled, replyLanguage }) {
+  const [lang, setLang] = useVoiceLanguage(replyLanguage);
   const { supported, listening, error, start, stop } = useVoice({ lang, onResult: onText });
 
   // Text fallback (plan: speech support is uneven, especially for Kannada).

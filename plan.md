@@ -4,6 +4,47 @@
 
 ---
 
+## Progress Remarks (last updated 2026-11-23)
+
+Based on reading the code, not running it. Details per file are in ARCHITECTURE.md, FILE_STRUCTURE.md and README.md.
+
+### Built (code exists)
+
+- Chat endpoint `POST /chat` with the OpenAI agent: 4 modes (Explore, Route, Itinerary, Email) and an MCP tool loop.
+- MCP server (stdio subprocess of the backend) with 8 tools: get_weather, web_search, search_trains, search_buses, send_trip_email, geocode_places, get_route, get_place_images.
+- Keycloak login: `keycloak-js` in the frontend, JWT check in the backend (`GET /me`), guest mode alongside.
+- Saved Preferences: `GET/PUT /me/preferences`, MongoDB `Preferences` collection (unique `sub` index), frontend page, interest ranking, saved language used by the agent and voice. Guests keep preferences in localStorage.
+- Health endpoints `/health` and `/ready`.
+- React frontend: chat, Leaflet map panel, voice input, Explore page.
+- Docker Compose: redis, mailpit, keycloak, backend, frontend (nginx-unprivileged serving the built app).
+- Tests written: backend 23 files, MCP 9 files, frontend 6 files (171 pass when run).
+
+### Partial (works in part, something is missing)
+
+- Redis: container exists in compose, but chat and cache data are not stored there yet (Phase 2).
+- Explore page: the place search is a mock over 6 hardcoded places in `frontend/src/data/places.js`; no places endpoint yet.
+- Unused frontend files: `SavedTrips.jsx` and `Login.jsx` exist but nothing uses them.
+- Backend and MCP tests: cannot run on this PC (Windows Application Control blocks `pydantic_core`), so their pass status is unverified.
+
+### Still in process / Planned (not created yet)
+
+- Saved trips and chat history in MongoDB (`api/trips.py`, `ChatHistory`, `TripsHistory`, `ExploreHistory`). Depends on: data model and API spec (Section 10).
+- Guest chats in Redis with TTL; caching of weather, images and places. Depends on: Redis wiring (Phase 2).
+- Rate limiting with slowapi on Redis. Depends on: Redis wiring.
+- Streaming replies (SSE) and an itinerary view. Depends on: structured itinerary output.
+- Nginx load balancer config, MCP server as its own Docker service. Depends on: Dockerfiles and the Phase 6 deploy design.
+- CI (GitHub Actions) and the golden eval set. Depends on: runnable tests and the transport decision.
+- Curated place fields (budget_style / access), saved preferences step 5: dropped for now by decision; only user interests are used.
+- Monitoring (Sentry, Prometheus) and Locust load test (Phase 7).
+
+### Unclear / open decisions
+
+- Real transport data source (Section 10, gap 1): the train/bus tools exist, but whether their data is real and sufficient is undecided.
+- Whether the Docker images and the Keycloak realm import work end to end (not run).
+- Whether `docker-compose.override.yml` is used (no such file in the folder).
+
+---
+
 ## 1. What Is This Project For?
 
 Planning a trip means jumping between many websites: one for weather, one for trains and buses, one for places to visit, another for maps. It is slow and confusing.
@@ -105,7 +146,8 @@ A simple layered design. Each layer has one job.
 flowchart TD
     A[User] --> B[React Frontend]
     B --> C[Nginx Load Balancer]
-    C --> D[FastAPI Backend]
+    C --> U[Uvicorn: ASGI server]
+    U --> D[FastAPI app]
     D --> E{Validate input, rate limit, auth check}
     E --> F[Load chat history<br/>Redis for guests, MongoDB for users]
     F --> G[AI Agent]
@@ -130,7 +172,11 @@ flowchart TD
 ```
 User types a message
    ↓
-React sends it to FastAPI (through Nginx)
+React sends it to the backend (through Nginx)
+   ↓
+Nginx passes it to Uvicorn (the ASGI server)
+   ↓
+Uvicorn hands it to the FastAPI app
    ↓
 FastAPI validates input, checks the user and rate limit
    ↓
@@ -150,6 +196,8 @@ FastAPI validates the output, saves the chat / trip and sends the reply
    ↓
 React shows text, itinerary, images, and map
 ```
+
+**Uvicorn:** the ASGI server that listens on port 8000 and passes each request to the FastAPI app. [Built] It starts from the `CMD` in `backend/Dockerfile` (`uvicorn app.main:app --host 0.0.0.0 --port 8000`), one process per container; `--reload` is for local development only. Gunicorn, several workers and several backend copies are [Planned] (they depend on the Nginx entry point and shared state in Redis or MongoDB). The Nginx step in the diagram is [Planned] too: today the browser calls Uvicorn on port 8000 directly.
 
 ---
 

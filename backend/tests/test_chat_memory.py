@@ -55,7 +55,7 @@ def post(client, **fields):
 
 def test_a_request_without_memory_still_works_and_passes_empty_memory(client, seen):
     assert post(client).status_code == 200
-    assert seen == [{"message": "What about the weather there?", "history": [], "last_mode": None, "last_place": None}]
+    assert seen == [{"message": "What about the weather there?", "history": [], "last_mode": None, "last_place": None, "preferences": None}]
 
 
 def test_the_route_passes_the_memory_on_as_plain_data(client, seen):

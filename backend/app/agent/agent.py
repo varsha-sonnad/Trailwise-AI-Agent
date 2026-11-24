@@ -21,7 +21,7 @@ import openai
 from app.agent import openai_adapter as oa
 from app.agent.mcp_client import McpClient, McpClientError
 from app.agent.modes import (
-    EXCLUDED_TOOLS, FORCED_TOOLS, MAP_MIN_PLACES, MAP_TOOL, MODES, BuiltPrompt, build_system_prompt, is_clarifying_question, is_send_confirmation, is_small_talk,
+    EXCLUDED_TOOLS, FORCED_TOOLS, MAP_MIN_PLACES, MAP_TOOL, MODES, BuiltPrompt, build_system_prompt, is_clarifying_question, is_send_confirmation, is_small_talk, preferences_line,
     has_two_places, required_tools, select_mode_with_reason,
 )
 from app.config import get_settings
@@ -351,12 +351,16 @@ def _geocoded(result: dict) -> list[dict]:
 
 async def _converse(
     message: str, mode: str, prompt: BuiltPrompt, mcp: McpClient | None, tools: list[dict],
-    history: list[dict] | None = None, last_place: dict | None = None,
+    history: list[dict] | None = None, last_place: dict | None = None, preferences: dict | None = None,
 ) -> str:
     """Run the model <-> tool loop for one user message and return the final reply text."""
     tools = [t for t in tools if t["name"] not in EXCLUDED_TOOLS.get(mode, ())]  # e.g. route mode never sees web_search or weather
     tool_defs = to_tools(tools)
     # Logged with every model decision: which mode and exact prompt version produced the step.
+    # The instructions: the fixed system prompt first, then (only when preferences are set) one short validated line.
+    # The tools and the fixed text stay the identical prefix, so prompt caching still works; the hash below is of the fixed text.
+    line = preferences_line(preferences)
+    instructions = prompt.text + "\n" + line + "\n" if line else prompt.text
     prompt_info = {"mode": mode, "prompt_hash": prompt.hash, "prompt_versions": list(prompt.versions)}
     tools_called: list[str] = []  # tool names the model asked for so far in this request (names only)
     # Only tool names the server really offered may be called (the model's names are not trusted).
@@ -388,7 +392,7 @@ async def _converse(
             tool_choice, choice_label = _tool_choice(mode, message, sorted(allowed), round_no)
         forced = round_no == 1 and choice_label == "required"
         try:
-            response = await _generate(input_items, tool_defs, prompt.text, tool_choice)
+            response = await _generate(input_items, tool_defs, instructions, tool_choice)
         except AgentError as exc:
             audit_event(
                 "model_decision", "error", round=round_no, error_type=_cause_name(exc),
@@ -551,7 +555,10 @@ async def _converse(
     raise AgentError("Too many tool rounds")
 
 
-async def _run(message: str, mode: str, prompt: BuiltPrompt, history: list[dict] | None = None, last_place: dict | None = None) -> str:
+async def _run(
+    message: str, mode: str, prompt: BuiltPrompt, history: list[dict] | None = None, last_place: dict | None = None,
+    preferences: dict | None = None,
+) -> str:
     """Connect to the MCP server (if it is up), discover its tools and run the conversation."""
     try:
         # One MCP connection per request keeps the server stateless (rule 1); it closes on exit.
@@ -564,16 +571,17 @@ async def _run(message: str, mode: str, prompt: BuiltPrompt, history: list[dict]
                 logger.warning("MCP tool discovery failed; answering without tools", exc_info=True)
                 audit_event("mcp_discovery", "error", error_type=type(exc).__name__)
                 tools = []
-            return await _converse(message, mode, prompt, mcp, tools, history, last_place)
+            return await _converse(message, mode, prompt, mcp, tools, history, last_place, preferences)
     except McpClientError as exc:
         # The tool server could not start: still answer, just without tools.
         logger.warning("MCP server unavailable; answering without tools", exc_info=True)
         audit_event("mcp_discovery", "error", error_type=type(exc).__name__, detail="mcp_server_unavailable")
-        return await _converse(message, mode, prompt, None, [], history, last_place)
+        return await _converse(message, mode, prompt, None, [], history, last_place, preferences)
 
 
 async def run_agent(
     message: str, history: list[dict] | None = None, last_mode: str | None = None, last_place: dict | None = None,
+    preferences: dict | None = None,
 ) -> str:
     """Answer one user message, letting the model use the MCP tools. Returns the reply text (an AgentReply).
 
@@ -581,6 +589,9 @@ async def run_agent(
     order), last_mode (the mode of the previous reply) and last_place ({name, lat, lng} of the last geocoded place).
     All of it is untrusted browser data. Writes the request's audit trail: received (with only the NUMBER of history
     messages, never their text), each step, then completed or failed.
+
+    preferences: the saved reply language, budget style and travel mode (validated by the route). They become one short
+    fixed-template line after the fixed system prompt (modes.preferences_line); only the names of the fields set are logged.
     """
     new_request_id()
     _active_model.set("")  # every request starts on the main model
@@ -592,6 +603,7 @@ async def run_agent(
     audit_event(
         "request_received", mode=mode, mode_reason=mode_reason, prompt_hash=prompt.hash, prompt_versions=list(prompt.versions),
         history_count=len(history_items), last_mode=last_mode if last_mode in MODES else None, has_last_place=bool(last_place),
+        preference_fields=sorted(k for k, v in (preferences or {}).items() if v),
         **message_fingerprint(message),
     )
     log_question(message)  # debug log only, and only with LOG_MESSAGES on (never the JSON audit log)
@@ -599,7 +611,7 @@ async def run_agent(
     try:
         # One overall cap for the whole request (every model call, retry and tool call together).
         async with asyncio.timeout(cap) as limit:
-            reply = await _run(message, mode, prompt, history_items, last_place)
+            reply = await _run(message, mode, prompt, history_items, last_place, preferences)
     except TimeoutError:
         if not limit.expired():
             # A timeout from somewhere else, not our cap: record its type like any unexpected failure, then let it surface.

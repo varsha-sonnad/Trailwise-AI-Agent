@@ -420,3 +420,37 @@ a.image-credit:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
 .pin-card-credit { font-size: 12px; color: var(--muted); }
 a.pin-card-credit { text-decoration: none; }
 a.pin-card-credit:hover { text-decoration: underline; }
+
+/* ---- Preferences page on /app: white cards of pill buttons and a save bar pinned at the bottom ---- */
+.prefs { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.prefs-scroll { flex: 1; min-height: 0; overflow-y: auto; width: 100%; max-width: 760px; margin: 0 auto; padding: 8px 24px 24px; }
+.prefs-title { margin: 8px 0 6px; font-size: clamp(1.6rem, 4vw, 2.2rem); line-height: 1.15; font-weight: 800; }
+.prefs-intro { margin: 0 0 16px; color: var(--muted); }
+.pref-note { margin: 0 0 16px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--bot-bg); }
+.pref-card { margin: 0 0 16px; padding: 18px 20px; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; }
+.pref-card h3 { margin: 0; font-size: 1.05rem; }
+.pref-hint { margin: 2px 0 12px; font-size: 14px; color: var(--muted); }
+.pref-pills { display: flex; flex-wrap: wrap; gap: 10px; }
+/* A pill: at least 44px tall. Unselected = white with a border; selected (aria-pressed) = the orange accent. */
+.pref-pill {
+  min-height: 44px; padding: 0 20px; border-radius: 999px; background: var(--panel); color: var(--text); border: 1px solid var(--border);
+  font-weight: 500;
+}
+.pref-pill:hover { background: var(--bot-bg); }
+.pref-pill[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 700; }
+.pref-bar {
+  display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 12px 24px;
+  background: var(--panel); border-top: 1px solid var(--border);
+}
+.pref-bar-text { flex: 1; margin: 0; font-size: 14px; color: var(--muted); }
+.pref-error { color: var(--error); }
+.pref-btn { min-height: 44px; padding: 0 20px; border-radius: 10px; }
+.pref-btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+@media (max-width: 760px) {
+  .prefs-scroll { padding: 8px 16px 16px; }
+  .pref-bar { padding: 10px 16px; flex-wrap: wrap; }
+  .pref-bar-text { flex-basis: 100%; }
+  .pref-bar-text:empty { display: none; }
+  /* Five tabs now: a little tighter so "Preferences" fits. */
+  .side-link { min-width: 0; padding: 6px 2px; font-size: 11px; }
+}

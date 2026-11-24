@@ -8,7 +8,8 @@ import { useCallback, useRef, useState } from "react";
 import { MAX_MESSAGE_CHARS, sendMessage } from "../api/chat";
 import { emptyMemory, initialMessages, memoryFor, nextMemory } from "./chatMemory";
 
-export function useChat() {
+// preferences: the saved preferences (reply language, budget style, travel mode are sent with each message).
+export function useChat(preferences) {
   // Each message: { id, role: "user" | "bot" | "error", text, images, places, route } (images: the photos under a bot reply, usually
   // none; places and route: what the map panel draws for that reply, usually empty).
   const [messages, setMessages] = useState(initialMessages);
@@ -18,6 +19,9 @@ export function useChat() {
   const nextId = useRef(1);
   // The mode of the last reply and the last geocoded place (see chatMemory.js). A ref: it is not shown, only sent.
   const memory = useRef(emptyMemory());
+  // The latest saved preferences, read when a message is sent (a ref, so a change never recreates send or restarts a chat).
+  const prefsRef = useRef(preferences);
+  prefsRef.current = preferences;
   // Counts "New chat" presses. A reply that arrives after one is dropped, so it cannot leak into the new chat.
   const generation = useRef(0);
 
@@ -41,7 +45,7 @@ export function useChat() {
       addMessage("user", message);
       setPending(true);
       try {
-        const { reply, images, mode, places, route } = await sendMessage(message, sent);
+        const { reply, images, mode, places, route } = await sendMessage(message, { ...sent, preferences: prefsRef.current });
         if (mine !== generation.current) return; // "New chat" was pressed while waiting
         memory.current = nextMemory(memory.current, { mode, places });
         addMessage("bot", reply, images, places, route);

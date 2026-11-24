@@ -6,13 +6,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import PlacePanel from "../components/PlacePanel";
-import { PLACES, learnPrompt, mockSearchPlace, planPrompt } from "../data/places";
+import { PLACES, learnPrompt, mockSearchPlace, planPrompt, rankPlaces } from "../data/places";
 
 // The longest search text accepted, in characters (the same limit as other short text boxes in the app).
 const MAX_QUERY_CHARS = 100;
 
-// onPrompt(text): open Chats with this message pre-filled.
-export default function Explore({ onPrompt }) {
+// onPrompt(text): open Chats with this message pre-filled. prefs: the saved preferences, used only to reorder the cards
+// (matching interests first, nothing hidden) and to add the budget style and travel mode to the Plan a Trip message.
+export default function Explore({ onPrompt, prefs }) {
   // What the search box holds.
   const [query, setQuery] = useState("");
   // A short hint under the search box (for example when the text is too short), or "".
@@ -68,7 +69,7 @@ export default function Explore({ onPrompt }) {
       )}
 
       <div className="place-grid">
-        {PLACES.map((place) => (
+        {rankPlaces(PLACES, prefs).map((place) => (
           <button key={place.id} type="button" className="place-card" onClick={() => setView({ status: "found", place })}>
             <img className="place-img" src={place.image} alt="" width="300" height="180" loading="lazy" />
             <span className="place-body">
@@ -84,7 +85,7 @@ export default function Explore({ onPrompt }) {
           view={view}
           onClose={closePanel}
           onLearnMore={(name) => onPrompt(learnPrompt(name))}
-          onPlan={(name) => onPrompt(planPrompt(name))}
+          onPlan={(name) => onPrompt(planPrompt(name, prefs))}
         />
       )}
     </div>
