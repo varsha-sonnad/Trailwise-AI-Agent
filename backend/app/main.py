@@ -12,10 +12,12 @@ from fastapi.responses import JSONResponse
 from app.agent.modes import validate_prompts
 from app.api.chat import router as chat_router
 from app.api.me import router as me_router
+from app.api.trips import router as trips_router
 from app.config import get_settings
 from app.core.debug_log import warn_if_debug_logging
 from app.core.mongo import create_client, ping
-from app.core.preferences import ensure_indexes
+from app.core.preferences import ensure_indexes as ensure_preferences_indexes
+from app.services.trips_store import ensure_indexes as ensure_trips_indexes
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,12 @@ async def lifespan(app: FastAPI):
     # The client connects lazily, so a down database does not stop the app: warn and carry on. /ready reports it.
     if not await ping(client):
         logger.warning("MongoDB did not answer the startup ping; /ready will return 503 until it does")
-    await ensure_indexes(client[get_settings().mongo_db])  # unique index on Preferences.sub; failures are only logged
+    else:
+        db = client[get_settings().mongo_db]
+        # Unique index on Preferences.sub; a failure is only logged.
+        await ensure_preferences_indexes(db)
+        # Create the (owner_id, created_at) trips and explore indexes; a failure logs the index name only and startup carries on.
+        await ensure_trips_indexes(db)
     try:
         yield
     finally:
@@ -66,6 +73,8 @@ def create_app() -> FastAPI:
     app.include_router(chat_router)
     # Who am I and saved preferences: GET /me, GET and PUT /me/preferences (need a Keycloak token).
     app.include_router(me_router)
+    # Saved trips and explore history: /trips, /explore-history (signed-in users only).
+    app.include_router(trips_router)
 
     @app.get("/health")
     async def health():

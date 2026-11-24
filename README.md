@@ -1,6 +1,6 @@
 # Trailwise
 
-Last updated: 2026-11-23 (checked against the code in the project folder on that date).
+Last updated: 2026-11-24 (checked against the code in the project folder after merging the trips and reply-actions branch).
 
 Trailwise is a chat-based AI travel planner. A user types a request in plain language, such as "Plan a 3-day trip to Goa from Bangalore", and an AI agent finds the information and builds the plan.
 
@@ -13,9 +13,10 @@ Planning a trip normally means jumping between many sites for weather, transport
 - Day-by-day itineraries [Partial] Missing: the agent writes them as text; no structured itinerary or itinerary view yet
 - Weather, images and maps [Built]
 - Voice input (English, Hindi, Kannada) [Built]
-- Email of trip plans [Partial] Missing: only works against Mailpit; no real provider or verified address yet
+- Email of trip plans [Partial] Missing: a saved trip is emailed to the signed-in user's verified address (5 per hour), but only tested against Mailpit; no production SMTP provider yet
 - Saved preferences (interests, budget style, travel mode, reply language) [Built]
-- Saved trips and chat history [Planned] Depends on: `users`, `ChatHistory` and `TripsHistory` collections (the conversation is only remembered within one chat, in the browser)
+- Saved trips and explore history [Built] (signed-in users only; `/trips`, `/explore-history`, `DELETE /me/data`)
+- Saved chat history [Planned] Depends on: the `users` record and a `ChatHistory` collection (the conversation is only remembered within one chat, in the browser)
 
 **Not included:** booking, payments or tickets. Trailwise is for information and planning only.
 
@@ -30,27 +31,28 @@ Every feature, component and file in this README carries a tag. **[Built]**: the
 | Feature | Tag | Missing (Partial) or depends on (Planned) |
 |---|---|---|
 | Chat with the OpenAI agent (four modes, eight tools, capped tool loop, fallback model, audit log) | [Built] | |
-| Backend routes: `/health`, `/ready`, `POST /chat`, `GET /me`, `GET`/`PUT /me/preferences` | [Built] | |
+| Backend routes: `/health`, `/ready`, `POST /chat`, `GET /me`, `GET`/`PUT /me/preferences`, `DELETE /me/data`, `/trips`, `/explore-history`, `POST /trips/{id}/email` | [Built] | |
 | Streaming replies (SSE) | [Planned] | An SSE route in the backend and a streaming hook in the frontend |
 | Keycloak login | [Built] | Dev mode only; a production Keycloak database is [Planned] |
 | Saved preferences (page, ranking, chat language, budget style, travel mode) | [Built] | |
-| Saved trips and chat history (`/chats`, `/trips`, `/explore/history`, export, delete) | [Planned] | `users`, `ChatHistory`, `TripsHistory`, `ExploreHistory` collections and their routes |
-| MongoDB (Atlas) | [Partial] | Only the `Preferences` collection is written |
-| Redis | [Partial] | Backend uses it only for Keycloak's key cache; tools use it as an optional cache; no guest chats, no rate limits, not checked by `/ready` |
+| Saved trips and explore history (`/trips`, `/explore-history`, `DELETE /me/data`) | [Built] | Signed-in users only; the Saved panel in the app is still "coming soon" |
+| Saved chat history (`/chats`) and data export (`GET /me/export`) | [Planned] | `users` and `ChatHistory` collections and their routes |
+| MongoDB (Atlas) | [Partial] | Written: `Preferences`, `trips` and `explore_history`; no chat history |
+| Redis | [Partial] | Backend uses it only for Keycloak's key cache; tools use it as an optional cache; no guest chats, rate limit only for trip emails (5 per user per hour), not checked by `/ready` |
 | Places feed (Home and Explore cards) | [Partial] | Six hardcoded places in `frontend/src/data/places.js`; no backend route; the Explore search is a mock |
 | Frontend: public home, `/app` (Home, Chats, Saved, Explore, Preferences), voice, photos, map panel | [Built] | The Saved panel is "coming soon" |
 | Itinerary as structured output and `ItineraryView` | [Planned] | An itinerary schema and the Responses API structured output |
-| Email of trip plans | [Partial] | Works against Mailpit; no real provider and no verified-address record (needs `users`) |
+| Email of trip plans | [Partial] | Emails a saved trip to the token's verified address; works against Mailpit; no production SMTP provider |
 | Nginx as the entry point | [Partial] | Only `frontend/nginx.conf` serves the built app; no TLS, proxy, load balancing or SSE settings |
-| Rate limits and spend cap | [Planned] | A Redis-backed limiter and a shared cache module |
+| Rate limits and spend cap | [Partial] | Only trip emails are limited (5 per user per hour, `core/rate_limit.py`); no limit on chat, no spend cap, no slowapi |
 | Observability | [Partial] | JSON audit log and optional debug log only; no Sentry, Prometheus or request IDs |
 | Flight data | [Planned] | Choosing a provider |
 | CI/CD, lint, evals, load tests | [Planned] | A `.github/` workflow, an `evals/` folder, Locust |
-| Tests | [Built] | Backend 23 files / 446 test functions, MCP 9 files / 327, frontend 6 files (`node --test`: 171 pass when run). Functions counted from the files; backend and MCP tests not run (see Unclear) |
+| Tests | [Partial] | Backend 26 files / 503 test functions, MCP 9 files / 329, frontend 7 files. Run on 2026-11-24 after the merge: backend 917 passed and 1 failed (`test_only_the_override_file_mounts_the_debug_logs` reads the git-ignored `docker-compose.override.yml`, which is not in this folder); MCP 609 passed (run with the backend venv, `mcp_server` has none here); frontend 207 passed; `npm run build` works. Missing: the one failing test needs the local override file |
 
 **Unclear (for the owner):**
-- Whether the backend tests pass: pytest could not run on the author's PC (Windows Application Control blocks `pydantic_core`).
-- Whether the MCP server tests pass (not run) and why four test-file counts quoted below (train 92, routes 84, geocode 53, images 137) are higher than the functions in the files (60, 40, 46, 62); parametrized cases may explain it.
+- Whether the backend tests pass in a clean checkout: 1 of 918 fails here because the git-ignored `docker-compose.override.yml` is not in this folder.
+- Why the MCP run shows 609 passed while 329 test functions were counted (and four per-file counts quoted below are higher than the functions in the files): parametrized cases are the likely reason, not checked one by one.
 - Whether the Docker images and the Keycloak realm import work today (not run).
 - Whether `docker-compose.override.yml` is in use: it is optional, git-ignored and not in this folder.
 
@@ -60,12 +62,12 @@ Every feature, component and file in this README carries a tag. **[Built]**: the
 
 | Layer | Technology | Status |
 |---|---|---|
-| Backend | Python + FastAPI (async) | [Built] `/health`, `/ready`, `POST /chat`, `GET /me`, `GET`/`PUT /me/preferences`. Trips, chats, export and streaming are [Planned] |
+| Backend | Python + FastAPI (async) | [Built] `/health`, `/ready`, `POST /chat`, `GET /me`, `GET`/`PUT /me/preferences`. Trips and explore history are [Built]; chats, export and streaming are [Planned] |
 | AI agent | OpenAI (Responses API, function calling) | [Built] four modes, eight tools through an MCP server |
-| Database | MongoDB Atlas (hosted) | [Partial] PyMongo `AsyncMongoClient`, `MONGODB_URI` required, `/ready` pings it. Missing: only `Preferences` is stored |
-| Cache and sessions | Redis | [Partial] in `docker-compose.yml`; Keycloak key cache and optional tool caches. Missing: guest sessions, rate limits |
+| Database | MongoDB Atlas (hosted) | [Partial] PyMongo `AsyncMongoClient`, `MONGODB_URI` required, `/ready` pings it. Missing: no chat history (`Preferences`, trips and explore history are stored) |
+| Cache and sessions | Redis | [Partial] in `docker-compose.yml`; Keycloak key cache and optional tool caches. Missing: guest sessions, general rate limits (only trip emails have one) |
 | Local email testing | Mailpit | [Built] in `docker-compose.yml` |
-| Frontend | React + Vite | [Built] chat, voice, photos, map panel, Keycloak login, Preferences. Itinerary view, streaming and saved trips are [Planned] |
+| Frontend | React + Vite | [Built] chat, voice, photos, map panel, Keycloak login, Preferences. Reply buttons (Save trip, Email plan) are [Built]; itinerary view and streaming are [Planned] |
 | Maps, weather, images | Leaflet, OpenWeatherMap, Pexels | [Partial] working; missing: a production tile provider and routing service (the public servers are for light use only) |
 | Login | Keycloak (dev mode) | [Partial] working in dev mode; missing: a production database |
 | Local infrastructure | Docker Compose | [Built] Redis, Mailpit, Keycloak, backend, frontend |
@@ -77,6 +79,8 @@ Trailwise_AI_Traveler/
 ├── README.md             Project overview and structure (this file)  [Built]
 ├── plan.md               Design, architecture and build phases  [Built]
 ├── docs/  [Built]
+│   ├── agent.md          How one chat request flows through the agent: mode choice, prompt build, forced and required tools, rounds, retries, fixed replies, memory, every tool, code-enforced vs prompt-advised rules, example traces  [Built]
+│   ├── redis.md          Every Redis key (writer, reader, content, TTL), what is never stored, what happens when Redis is down, and its current status  [Built]
 │   └── prompts.md        How the prompt files are versioned: heading format, version bumps, tags, rebuild and rollback  [Built]
 ├── CLAUDE.md             Rules Claude Code follows in this project  [Built]
 ├── claudeprompts.md      Log of prompts given to Claude Code and their outcomes  [Built]
@@ -119,6 +123,7 @@ Trailwise_AI_Traveler/
 │       ├── api/  [Built]
 │       │   ├── client.js     The only code that calls the backend (postJson, putJson, getJson, ApiError, friendly network errors)  [Built]
 │       │   ├── preferences.js  Saved preferences: allowed values, pure helpers, guest copy in localStorage, GET/PUT /me/preferences  [Built]
+│       │   ├── trips.js      Save a trip and email a saved trip: POST /trips, POST /trips/{id}/email  [Built]
 │       │   └── chat.js       sendMessage(): POST /chat and the 422, 502 and 503 messages  [Built]
 │       ├── data/  [Built]
 │       │   ├── places.js             The hardcoded list for the /app Home dashboard and Explore page: six places (name, tagline, region, description, interest tags, image path, photo credit), `rankPlaces` (the saved interests reorder the cards), the quick-start chips and a MOCK place search (TODO: real search); no timings or prices  [Partial] Missing: backend places source, real search.
@@ -135,6 +140,9 @@ Trailwise_AI_Traveler/
 │       │   ├── NavBar.jsx        Public top bar: logo on the left; Destinations (scrolls to the section) and Log in (straight to Keycloak's login page) in the right corner; a menu button on phones  [Built]
 │       │   ├── PlacePanel.jsx    The slide-in side panel on Explore: photo with its credit, name, region, short description, Learn More and Plan a Trip; also its Searching... and not-found states  [Built]
 │       │   ├── HomeDashboard.jsx Home section of /app: greeting, quick-start chips, place cards or "Continue your trip" and "Recently explored"  [Partial] Missing: real returning-user data.
+│       │   ├── replyActions.js   Pure rule for which buttons appear under a reply (decided from the response fields, never the wording)  [Built]
+│       │   ├── ReplyActions.jsx  The buttons under a plan or explore reply: Save trip, Email plan, Plan a trip to <place>  [Built]
+│       │   ├── LoginPrompt.jsx   The popup that asks a guest to log in before saving or emailing  [Built]
 │       │   ├── ChatWindow.jsx    The chat area: message list plus input  [Built]
 │       │   ├── MessageList.jsx   Scrolling conversation with a "Thinking..." bubble  [Built]
 │       │   ├── ImageRow.jsx      Up to 3 photo cards under a bot reply, with the Pexels credit on a dark strip  [Built]
@@ -184,11 +192,13 @@ Trailwise_AI_Traveler/
     ├── app/  [Built]
     │   ├── __init__.py   Marks app as a Python package  [Built]
     │   ├── api/  [Built]
-    │   │   ├── chat.py      The POST /chat route (thin: validate, call the agent, return)  [Partial] Missing: streaming and saved history.
-    │   │   └── me.py        GET /me (the signed-in user from the Keycloak token) and GET/PUT /me/preferences (saved preferences)  [Built]
+    │   │   ├── chat.py      The POST /chat route (thin: validate, call the agent, return); for a signed-in user it also saves one explore-history entry after an explore reply with a geocoded place  [Partial] Missing: streaming and saved chat history.
+    │   │   ├── trips.py     Saved trips and explore history for signed-in users (/trips, /explore-history) and POST /trips/{id}/email; owner_id is always the token sub  [Built]
+    │   │   └── me.py        GET /me (the signed-in user from the Keycloak token), GET/PUT /me/preferences (saved preferences) and DELETE /me/data (removes the user's trips and explore history)  [Built]
     │   ├── agent/  [Built]
     │   │   ├── __init__.py  Marks agent as a Python package  [Built]
     │   │   ├── mcp_client.py  McpClient: starts the MCP server over stdio, lists its tools, calls them  [Built]
+    │   │   ├── legs.py      Route mode's gateway flow helpers: which places were geocoded (refuses a train, bus or road search whose ends were not), the "destination has no station" signal, and the map legs (roads solid, other connections dashed, drawn by the server)  [Built]
     │   │   ├── modes.py     select_mode() picks explore, route, itinerary or email by regex (select_mode_with_reason() also returns the rule's name, logged as `mode_reason`; route rules: transport words such as travel, options and transport, "how to/can I/do I go/travel/get/reach", "ways to", "from X to Y", "to X from Y" and a bare "X to Y", all of which beat the previous mode, explore included; "tell me about" and similar phrases go back to explore); EXCLUDED_TOOLS hides web_search and get_weather from the model in route mode; has_two_places() says when a message names both ends of a route; FORCED_TOOLS and REQUIRED_TOOLS (explore: web_search, get_weather, geocode_places, get_place_images; route: geocode_places, search_trains, search_buses and get_route, with no web_search; MAP_TOOL and MAP_MIN_PLACES say get_route is required only after two places were found) and required_tools() say which tools are forced on round 1 and which must be attempted; build_system_prompt() joins system.md and the mode's file and returns a 12-character hash and the version labels; validate_prompts() checks all five headings at startup  [Built]
     │   │   ├── openai_adapter.py  Pure helpers for the OpenAI Responses API: tool definitions (strict false), the allowed_tools choice, JSON argument parsing, function_call_output items, the cached-token reader and error mapping (no network)  [Built]
     │   │   ├── agent.py     Discovers MCP tools, picks the mode on every turn, sends the message to OpenAI (Responses API) with that prompt and runs the capped tool loop  [Built]
@@ -202,12 +212,17 @@ Trailwise_AI_Traveler/
     │   ├── core/  [Built]
     │   │   ├── audit.py     Audit log: JSON lines of agent activity, secrets and message text never written  [Built]
     │   │   ├── debug_log.py  Optional plain-text debug log for local testing (DEBUG_LOG_FILE, LOG_MESSAGES): REQUEST, TOOL, RESULT, ERROR and, with LOG_MESSAGES, QUESTION and ANSWER lines  [Built]
+    │   │   ├── rate_limit.py  A per-key counter in Redis (fixed window); used for 5 trip emails per user per hour  [Partial] Missing: no limit on chat or the other routes.
     │   │   ├── preferences.py  MongoDB access for saved preferences (Preferences collection, unique sub index)  [Built]
     │   │   └── auth.py      Verifies Keycloak access tokens (PyJWT, keys cached in Redis) and reads guest session ids  [Built]
+    │   ├── services/  [Built]
+    │   │   ├── trip_email.py  Builds the plain-text email of a saved trip on the server (no model call, fixed "verify before travel" footer) and sends it by SMTP  [Built]
+    │   │   └── trips_store.py  MongoDB reads and writes for trips and explore history (owner_id in every query, 100 trips and 50 explore entries per user, indexes)  [Built]
     │   ├── models/  [Built]
+    │   │   ├── trips.py     Strict models for trips and explore history (size caps, no owner_id in any input)  [Built]
     │   │   ├── preferences.py  Schema for saved preferences (four fields, fixed allowed values)  [Built]
-    │   │   └── chat.py      Request and response models for /chat (strict memory fields; ChatImage: a Pexels-only photo with a required credit)  [Partial] Missing: streaming and saved history.
-    │   └── main.py       Creates the app (lifespan: shared MongoDB client), defines /health and /ready  [Built]
+    │   │   └── chat.py      Request and response models for /chat (strict memory fields; ChatImage: a Pexels-only photo with a required credit)  [Partial] Missing: streaming and saved chat history.
+    │   └── main.py       Creates the app (lifespan: shared MongoDB client; creates the Preferences, trips and explore-history indexes), defines /health and /ready  [Built]
     └── tests/  [Built]
         ├── conftest.py   Shared test setup (fake API key)  [Built]
         ├── test_health.py  Smoke test for /health  [Built]
@@ -221,6 +236,9 @@ Trailwise_AI_Traveler/
         ├── test_tool_choice.py  Tests for forcing a tool on round 1 (allowed_tools, mode required), automatic afterwards, greetings and email never forced, and the no-live-information fallback  [Built]
         ├── test_modes.py  Tests for mode selection, prompt building, heading validation and the mode, prompt_hash, prompt_versions and cached_tokens audit fields  [Built]
         ├── test_auth.py   Tests for the Keycloak token check (fake signing key, no Keycloak needed)  [Built]
+        ├── test_trips.py  Tests for trips, explore history, DELETE /me/data and the explore save in /chat (fake MongoDB, fake sign-in)  [Built]
+        ├── test_trip_email.py  Tests for POST /trips/{id}/email (fake database, Redis and SMTP): verified token email only, 5 per hour, truthful errors  [Built]
+        ├── test_gateway_flow.py  Tests for the gateway flow (remote places such as Kedarnath): the destination-not-found signal, only geocoded pairs searched, unknown junctions dropped, road and dashed legs, the legs in /chat and the route.md rules (model and MCP faked)  [Built]
         ├── test_preferences_prompt.py  Tests for the saved-preferences line after the fixed system prompt (fake provider): validated values only, free text refused, fixed prefix and tools unchanged  [Built]
         ├── test_preferences.py  Tests for GET/PUT /me/preferences (fake database): defaults, validation, token-only user, one user cannot touch another's  [Built]
         ├── test_mongo.py  Tests for the shared MongoDB client, the startup ping and /ready (fake client, no Atlas)  [Built]
@@ -325,6 +343,13 @@ Trailwise_AI_Traveler/
 | `backend/tests/test_model_fallback.py` [Built] | Fake OpenAI client and fixed model names: fallback used after the main model's retries (on 503, 500 and 504), later tool rounds stay on it, each request starts on the main model, no fallback on 429, 401, 403, 400 or timeouts, off when unset or equal to the main model, both models failing gives the busy error, and the `model_fallback` audit event. |
 | `backend/tests/test_health.py` [Built] | Smoke test for `/health`. |
 | `backend/tests/test_chat.py` [Built] | Tests for `/chat` with a fake agent: good reply, empty, blank, missing or too-long message (422) and agent failure (502). |
+| `docs/agent.md`, `docs/redis.md` [Built] | `agent.md`: how one chat request flows through the agent (modes, prompt build, forced and required tools, retries, memory, every tool, enforced vs advised rules, example traces). `redis.md`: every Redis key, what is never stored, what happens when Redis is down. |
+| `frontend/src/components/replyActions.js`, `ReplyActions.jsx`, `LoginPrompt.jsx`, `frontend/src/api/trips.js` [Built] | **Buttons under replies.** `replyActions()` decides from the response fields only (never the wording): under an `itinerary` reply with a valid place, or a `route` reply with a valid leg, show **Save trip** and **Email plan**; under an `explore` reply about exactly one place show **Plan a trip to <place>** (it sends that text as a new message); nothing under greetings, questions, short explore answers or errors. Save trip calls `POST /trips` (title from the places, reply cut to 8000 characters) and then reads "Saved ✓" and is disabled. Email plan saves first when needed, then calls `POST /trips/{id}/email`, and reads "Sent to your email" only after the server says `sent: true`; a failure shows the reason. A guest (or a 401) gets the `LoginPrompt` popup. Known edge: a fixed failure reply that still carries places looks like a plan; a backend `kind: "plan"` field is [Planned] (depends on a change to the `/chat` response). `ReplyActions.jsx` and `replyActions.js` differ only by case, so they are imported with their extensions. |
+| `frontend/tests/reply-actions.test.mjs` [Built] | Node tests for the buttons: the visibility matrix (including that the wording is never read), the trip title and body limits, save-then-email, the two API calls and their error messages, how the buttons and the login popup render, and the labels "Saved ✓" and "Sent to your email". |
+| `backend/app/agent/legs.py`, `backend/tests/test_gateway_flow.py` [Built] | **Gateway flow** for remote destinations such as Kedarnath (route mode only). `search_trains` (`station_not_found`) and `search_buses` (`city_not_found`) now say which end failed (`failed_end`); a missing **destination** is the signal for the flow, which `route.md` describes: say plainly there is no direct train or bus, propose a gateway city (Haridwar, Rishikesh or Dehradun for Kedarnath), search trains and buses from the start city to it, describe the onward legs as general advice (no timings or prices), geocode every junction in travel order (unknown ones are dropped), and label it "suggested connections, verify before travel". In code: `geocode_places` runs first in a round, and a train, bus or `get_route` call is refused (`place_not_located`, shown to the model as data) when an end was not geocoded (only enforced once a lookup worked, so a geocoder outage does not block searches). The server builds `legs` for the `/chat` response: every found `get_route` road is a solid `road` leg; in the gateway flow, consecutive geocoded journey places that no road covers become straight `other` legs, which the map draws dashed. The model never supplies coordinates. |
+| `backend/app/api/trips.py` (`POST /trips/{id}/email`), `backend/app/services/trip_email.py` [Built], `backend/app/core/rate_limit.py` [Partial] Missing: only trip emails are limited | **Email a saved trip.** Only a trip that is already saved (and yours: someone else's is a 404) can be emailed. The recipient is the `email` in the validated Keycloak token and only when the token's `email_verified` is exactly `true` (`Principal.email_verified`); the request cannot choose it. At most **5 per user per hour** (a fixed-window counter in Redis; if Redis is down nothing is sent). The server builds a plain-text body from the saved trip (title, place names, summary, the saved reply) plus a fixed footer ("Suggested connections, verify before travel..."), with no model call and no timings or prices of its own. The answer is truthful: `{"sent": true}` only after the SMTP server accepted the message, otherwise `{"detail": {"sent": false, "error": ..., "message": ...}}` with 401 (guest), 403 `email_not_verified`, 404, 429 `rate_limited` (with `Retry-After`), 502 `email_send_failed`, or 503 `email_not_configured` / `email_unavailable`. Settings: `SMTP_EMAIL`, `SMTP_PASSWORD`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_STARTTLS` (the same names as the MCP server's; defaults match Mailpit). The address, subject and body are never logged. |
+| `backend/app/api/trips.py`, `backend/app/services/trips_store.py`, `backend/app/models/trips.py` [Built] | Saved data for **signed-in users only** (guests store nothing; a guest or anonymous caller gets 401). `POST /trips` (title up to 100 characters, up to 12 places, summary up to 500, reply up to 8000; unknown fields such as `owner_id` are a 422; at most **100** trips per user, then 409 with a clear message), `GET /trips` (newest first, `page` and `page_size`, at most 50 per page, no reply text in the list), `GET` and `DELETE /trips/{id}`, `GET /explore-history` (latest 50, newest first), `DELETE /explore-history`. `DELETE /me/data` (in `api/me.py`) removes the user's trips and explore history. `owner_id` is always the Keycloak token `sub`, put in every query; another user's trip is a 404. Indexes `(owner_id, created_at)` are created at startup (a failure logs the index name only). After a successful explore reply with a geocoded place, `POST /chat` saves one explore entry (place name from the geocoder) within 2 seconds; the response has `saved` true or false (null for guests and other modes), and a failed save is logged by error type only, never message text. A database error on these routes is a generic 503. |
+| `backend/tests/test_trips.py`, `backend/tests/test_trip_email.py` [Built] | An in-memory fake MongoDB and a fake sign-in (two users can be switched): guest 401, create and read, `owner_id` in the body refused, every size cap, another user's trip 404, the 100-trip limit, newest-first paging and the 50 page-size cap, the 50-entry explore trim, `DELETE /me/data`, index creation and a failed index logging its name only, and the explore save in `/chat` (signed in, guest, other mode, failure, timeout, no text in the log). `test_trip_email.py` covers `POST /trips/{id}/email` with a fake database, Redis and SMTP. |
 
 **Planned, not created yet**
 
@@ -366,12 +391,12 @@ npm run dev
 
 `npm run build` checks that it compiles. The backend must be on http://localhost:8000 (change `VITE_API_URL` in `frontend/.env.local` if not).
 
-Run the tests (counts are test functions counted from the files; backend and MCP tests were not run by the audit):
+Run the tests (function counts are counted from the files; results were run on 2026-11-24 after the merge):
 
 ```
-cd backend && pytest          # 23 files, 446 test functions
+cd backend && pytest          # 26 files, 503 test functions; 917 passed, 1 failed (needs docker-compose.override.yml)
 cd mcp_server && pytest       # 9 files, 327 test functions
-cd frontend && node --test    # 6 files, 171 passed when run on 2026-11-23
+cd frontend && node --test    # 7 files, 207 passed on 2026-11-24
 ```
 
 Run the backend in Docker instead (from the project root; needs the project-root `.env`, which is mounted read-only into the container, never copied into the image):

@@ -12,7 +12,7 @@ OLD_NAME = "get_train" + "_details"  # written in two pieces so this file does n
 
 
 def test_the_prompt_versions_were_bumped():
-    assert prompt_version("system") == "trailwise.system@5" and prompt_version("route") == "trailwise.route@6"
+    assert prompt_version("system") == "trailwise.system@5" and prompt_version("route") == "trailwise.route@7"
 
 
 @pytest.mark.parametrize("mode", ["explore", "route", "itinerary", "email"])

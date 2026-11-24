@@ -174,7 +174,7 @@ describe("sendMessage", () => {
   test("returns the reply and its images", async () => {
     globalThis.fetch = fakeFetch({ reply: "Hi.", images: [photo(1)] });
     try {
-      assert.deepEqual(await chatApi.sendMessage("hello"), { reply: "Hi.", images: [photo(1)], mode: null, places: [], route: [] });
+      assert.deepEqual(await chatApi.sendMessage("hello"), { reply: "Hi.", images: [photo(1)], mode: null, places: [], route: [], legs: [] });
     } finally {
       globalThis.fetch = realFetch;
     }
@@ -183,7 +183,7 @@ describe("sendMessage", () => {
     for (const body of [{ reply: "Hi." }, { reply: "Hi.", images: null }, { reply: "Hi.", images: "x" }]) {
       globalThis.fetch = fakeFetch(body);
       try {
-        assert.deepEqual(await chatApi.sendMessage("hello"), { reply: "Hi.", images: [], mode: null, places: [], route: [] });
+        assert.deepEqual(await chatApi.sendMessage("hello"), { reply: "Hi.", images: [], mode: null, places: [], route: [], legs: [] });
       } finally {
         globalThis.fetch = realFetch;
       }

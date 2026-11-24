@@ -1,6 +1,6 @@
 # Trailwise AI Traveler: File Structure
 
-Last updated: 2026-11-23 (checked against the files on disk that day).
+Last updated: 2026-11-24 (checked against the files on disk after merging the trips and reply-actions branch).
 
 Every file below exists in the project folder today, with one plain line each. Files and folders that do not exist yet are listed separately under "Not created yet". Generated folders (`node_modules/`, `.venv/`, `dist/`, `__pycache__/`, `.pytest_cache/`, `.git/`, `backend/logs/`) are left out.
 
@@ -22,6 +22,8 @@ Every file below exists in the project folder today, with one plain line each. F
 - `FILE_STRUCTURE.md` [Built]: this file.
 - `plan.md` [Built]: the project plan, phases and launch checklist.
 - `README.md` [Built]: the front page: status, structure, setup and how to run.
+- `docs/agent.md` [Built]: how one chat request flows through the agent, every tool and the enforced rules.
+- `docs/redis.md` [Built]: every Redis key, what is never stored and what happens when Redis is down.
 - `docs/prompts.md` [Built]: the rules for versioning the five prompt files.
 
 ## backend/ (FastAPI server)
@@ -31,13 +33,15 @@ Every file below exists in the project folder today, with one plain line each. F
 - `backend/requirements.txt` [Built]: the Python packages the backend needs.
 - `backend/.gitignore` [Built]: keeps `.venv`, caches, `logs/` and `.env` out of git for this folder.
 - `backend/app/__init__.py` [Built]: marks `app` as a package.
-- `backend/app/main.py` [Built]: creates the app, the shared MongoDB client, the Preferences index, and `/health` and `/ready`.
+- `backend/app/main.py` [Built]: creates the app, the shared MongoDB client, the Preferences, trips and explore-history indexes, and `/health` and `/ready`.
 - `backend/app/config.py` [Built]: reads all settings from the environment and the root `.env`.
-- `backend/app/api/chat.py` [Partial]: the `POST /chat` route. Missing: streaming and saving history.
-- `backend/app/api/me.py` [Built]: `GET /me` and `GET`/`PUT /me/preferences`.
+- `backend/app/api/chat.py` [Partial]: the `POST /chat` route; for a signed-in user it also saves one explore-history entry after an explore reply. Missing: streaming and saved chat history.
+- `backend/app/api/me.py` [Built]: `GET /me`, `GET`/`PUT /me/preferences` and `DELETE /me/data`.
+- `backend/app/api/trips.py` [Built]: saved trips and explore history for signed-in users (`/trips`, `/explore-history`) and `POST /trips/{id}/email`.
 - `backend/app/agent/__init__.py` [Built]: marks `agent` as a package.
 - `backend/app/agent/agent.py` [Built]: sends the message to OpenAI and runs the capped tool loop through the MCP client.
 - `backend/app/agent/modes.py` [Built]: picks the mode, builds the system prompt, lists the forced and required tools, and builds the saved-preferences line.
+- `backend/app/agent/legs.py` [Built]: route mode's gateway-flow helpers (geocoded-pair checks, the destination-not-found signal, the map legs).
 - `backend/app/agent/mcp_client.py` [Built]: starts the MCP server over stdio, lists its tools and calls them.
 - `backend/app/agent/openai_adapter.py` [Built]: pure helpers for the OpenAI Responses API (tool definitions, tool choice, arguments, errors).
 - `backend/app/agent/prompts/system.md` [Built]: the main system prompt.
@@ -49,8 +53,12 @@ Every file below exists in the project folder today, with one plain line each. F
 - `backend/app/core/auth.py` [Built]: verifies Keycloak access tokens and reads guest session ids.
 - `backend/app/core/debug_log.py` [Built]: the optional plain-text debug log for local testing.
 - `backend/app/core/mongo.py` [Built]: the shared MongoDB client, the ping and `get_db`.
+- `backend/app/core/rate_limit.py` [Partial]: a per-key counter in Redis (fixed window). Missing: only trip emails use it (5 per user per hour); chat and the other routes are not limited.
 - `backend/app/core/preferences.py` [Built]: saves and loads preferences in the `Preferences` collection.
+- `backend/app/services/trip_email.py` [Built]: builds the plain-text email of a saved trip on the server and sends it by SMTP.
+- `backend/app/services/trips_store.py` [Built]: MongoDB reads and writes for trips and explore history (`owner_id` in every query, indexes).
 - `backend/app/models/chat.py` [Built]: the request and response shapes for `/chat`, including the memory and preferences fields.
+- `backend/app/models/trips.py` [Built]: strict models for trips and explore history (size caps, no `owner_id` in any input).
 - `backend/app/models/preferences.py` [Built]: the saved-preferences shape and its allowed values.
 - `backend/tests/conftest.py` [Built]: shared test setup with a fake MongoDB client and fake settings.
 - `backend/tests/test_agent_tools.py` [Built]: tests for the agent's tool loop.
@@ -62,6 +70,7 @@ Every file below exists in the project folder today, with one plain line each. F
 - `backend/tests/test_debug_log.py` [Built]: tests for the optional debug log.
 - `backend/tests/test_explore_required.py` [Built]: tests for explore mode's required tools.
 - `backend/tests/test_force_web_search.py` [Built]: tests for forcing `web_search` first.
+- `backend/tests/test_gateway_flow.py` [Built]: tests for the gateway flow (remote destinations, dashed legs).
 - `backend/tests/test_health.py` [Built]: the `/health` smoke test.
 - `backend/tests/test_mcp_client.py` [Built]: tests that start the real MCP server.
 - `backend/tests/test_mcp_timeouts.py` [Built]: tests for tool call time limits.
@@ -74,10 +83,12 @@ Every file below exists in the project folder today, with one plain line each. F
 - `backend/tests/test_preferences.py` [Built]: tests for `GET`/`PUT /me/preferences` with a fake database.
 - `backend/tests/test_preferences_prompt.py` [Built]: tests for the saved-preferences line with a fake provider.
 - `backend/tests/test_required_modes.py` [Built]: tests for required tools in itinerary and route mode and the overall time cap.
+- `backend/tests/test_trip_email.py` [Built]: tests for `POST /trips/{id}/email` (fake database, Redis and SMTP).
+- `backend/tests/test_trips.py` [Built]: tests for trips, explore history and `DELETE /me/data` with a fake MongoDB.
 - `backend/tests/test_tool_choice.py` [Built]: tests for forcing a tool on round 1.
 - `backend/tests/test_train_prompts.py` [Built]: tests for the train prompt rules.
 
-The 23 backend test files hold 446 test functions (counted, not run: see Unclear).
+The 26 backend test files hold 503 test functions (917 passed, 1 failed on 2026-11-24: see Unclear).
 
 ## mcp_server/ (tool server, started by the backend over stdio)
 
@@ -104,7 +115,7 @@ The 23 backend test files hold 446 test functions (counted, not run: see Unclear
 - `mcp_server/tests/test_images.py` [Built]: image tool tests.
 - `mcp_server/tests/test_no_key_in_logs.py` [Built]: checks that an API key never appears in logs.
 
-The 9 MCP test files hold 327 test functions (counted, not run: see Unclear).
+The 9 MCP test files hold 329 test functions (609 cases passed on 2026-11-24; parametrized cases explain the higher number).
 
 ## keycloak/ (login server setup)
 
@@ -131,12 +142,13 @@ The 9 MCP test files hold 327 test functions (counted, not run: see Unclear).
 - `frontend/src/styles.css` [Built]: all the styles.
 - `frontend/src/api/client.js` [Built]: the only code that calls the backend (get, post, put and friendly errors).
 - `frontend/src/api/chat.js` [Built]: `sendMessage`, which calls `POST /chat`.
+- `frontend/src/api/trips.js` [Built]: save a trip and email a saved trip (`POST /trips`, `POST /trips/{id}/email`).
 - `frontend/src/api/preferences.js` [Built]: preference values, the browser copy and `GET`/`PUT /me/preferences`.
 - `frontend/src/auth/session.js` [Built]: Keycloak sign-in, the guest session id and the auth headers.
 - `frontend/src/data/places.js` [Partial]: six hardcoded places, ranking by interest and a mock place search. Missing: a backend places source and a real search.
 - `frontend/src/data/mockReturningUser.js` [Partial]: mock returning-user data, off by default. Missing: backend endpoints for saved trips.
 - `frontend/src/hooks/useAuth.js` [Built]: who is signed in, plus login and logout.
-- `frontend/src/hooks/useChat.js` [Built]: the conversation state and the per-session memory.
+- `frontend/src/hooks/useChat.js` [Built]: the conversation state, the per-session memory, the saved preferences sent with each message and the map legs.
 - `frontend/src/hooks/chatMemory.js` [Built]: pure helpers for the chat memory rules.
 - `frontend/src/hooks/usePreferences.js` [Built]: preferences state: load, edit, reset, save, and the copy to a new account.
 - `frontend/src/hooks/useVoice.js` [Built]: voice input in English, Hindi and Kannada.
@@ -148,6 +160,9 @@ The 9 MCP test files hold 327 test functions (counted, not run: see Unclear).
 - `frontend/src/components/MapPanel.jsx` [Built]: the map panel (column on desktop, overlay on phones).
 - `frontend/src/components/PlaceMap.jsx` [Built]: the Leaflet map with pins, card and route line.
 - `frontend/src/components/mapData.js` [Built]: pure helpers for the map.
+- `frontend/src/components/replyActions.js` [Built]: the rule for which buttons appear under a reply.
+- `frontend/src/components/ReplyActions.jsx` [Built]: the Save trip, Email plan and Plan a trip to buttons under a reply.
+- `frontend/src/components/LoginPrompt.jsx` [Built]: the popup that asks a guest to log in.
 - `frontend/src/components/ChatWindow.jsx` [Built]: the chat area: messages plus input.
 - `frontend/src/components/MessageList.jsx` [Built]: the scrolling conversation.
 - `frontend/src/components/MessageBubble.jsx` [Built]: one message, with bot replies as safe Markdown.
@@ -165,10 +180,11 @@ The 9 MCP test files hold 327 test functions (counted, not run: see Unclear).
 - `frontend/tests/chat-memory.test.mjs` [Built]: tests for the chat memory rules.
 - `frontend/tests/map-panel.test.mjs` [Built]: tests for the map panel.
 - `frontend/tests/place-ranking.test.mjs` [Built]: tests for ranking by interest.
+- `frontend/tests/reply-actions.test.mjs` [Built]: tests for the reply buttons and the login popup.
 - `frontend/tests/preferences.test.mjs` [Built]: tests for the preferences helpers.
 - `frontend/tests/preferences-chat.test.mjs` [Built]: tests for what the chat sends and the voice language.
 
-The 6 frontend test files run with `cd frontend && node --test` (171 passed when run on 2026-11-23).
+The 7 frontend test files run with `cd frontend && node --test` (207 passed on 2026-11-24).
 
 ## Not created yet
 
@@ -180,10 +196,10 @@ Nothing below exists on disk. "Depends on" says what has to come first.
 | `evals/` (test prompts for answer quality) | [Planned] | A golden prompt set (30 to 50 prompts) and CI |
 | `.github/workflows/` (CI/CD) | [Planned] | A decision on lint and test commands; no lint command exists |
 | `mcp_server/Dockerfile` | [Planned] | Running the MCP server as its own service instead of a subprocess |
-| `backend/app/services/` (one client per outside provider) | [Planned] | Moving provider code out of `mcp_server/tools/` |
+| One client per outside provider in `backend/app/services/` | [Planned] | Moving provider code out of `mcp_server/tools/`; `services/` exists now but holds only the trips store and the trip email |
 | `backend/app/db/` or a shared Redis helper (`cache`) | [Planned] | Deciding to share one Redis helper between backend and tools |
-| `backend/app/api/trips.py` (trips, chats, explore history, export, delete) | [Planned] | `users`, `ChatHistory`, `TripsHistory`, `ExploreHistory` and the itinerary schema |
-| Rate limiting module (`ratelimit`) | [Planned] | The shared Redis helper and a limiter library |
+| Chat history routes, `users` record and data export (`GET /me/export`) | [Planned] | `users` and `ChatHistory` collections; trips, explore history and `DELETE /me/data` exist already |
+| General rate limiting (chat, per-IP, daily spend cap) | [Planned] | The shared Redis helper and a limiter library; `core/rate_limit.py` exists but only limits trip emails |
 | Itinerary schema and `frontend/src/components/ItineraryView.jsx` | [Planned] | Structured itinerary output from the backend |
 | A streaming hook in `frontend/src/hooks/` | [Planned] | An SSE route in the backend |
 | Real places endpoint and Explore search | [Planned] | A backend places source |
@@ -223,5 +239,5 @@ Check with `git status`. If `.env` shows up, run `git rm --cached .env`, commit,
 ## Unclear (for the owner)
 
 - `docker-compose.override.yml`: described in older docs as an optional local file that mounts `./debug-logs`; it is not in this folder, so whether you use it is unknown.
-- Whether the backend and MCP tests pass: test functions were counted from the files, but pytest could not run (Windows Application Control blocks `pydantic_core`).
+- One backend test fails: `test_only_the_override_file_mounts_the_debug_logs` reads the git-ignored `docker-compose.override.yml`, which is not in this folder. Whether you use that file is your decision.
 - Whether the Docker images and the Keycloak realm import work today: not run during the audit.

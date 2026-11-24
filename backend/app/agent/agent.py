@@ -19,6 +19,7 @@ from functools import lru_cache
 import openai
 
 from app.agent import openai_adapter as oa
+from app.agent.legs import CITY_TOOLS, GeoState, build_legs, check_city_pair, check_route_points, is_gateway_signal
 from app.agent.mcp_client import McpClient, McpClientError
 from app.agent.modes import (
     EXCLUDED_TOOLS, FORCED_TOOLS, MAP_MIN_PLACES, MAP_TOOL, MODES, BuiltPrompt, build_system_prompt, is_clarifying_question, is_send_confirmation, is_small_talk, preferences_line,
@@ -27,7 +28,7 @@ from app.agent.modes import (
 from app.config import get_settings
 from app.core.audit import audit_event, message_fingerprint, new_request_id, openai_request_id, usage_fields
 from app.core.debug_log import log_answer, log_question
-from app.models.chat import clean_images, clean_places
+from app.models.chat import clean_images, clean_legs, clean_places
 
 logger = logging.getLogger(__name__)
 
@@ -103,12 +104,17 @@ class AgentReply(str):
 
     images: list
     places: list
+    legs: list
     mode: str | None
 
-    def __new__(cls, text: str, images: list | None = None, places: list | None = None, mode: str | None = None):
+    def __new__(
+        cls, text: str, images: list | None = None, places: list | None = None, mode: str | None = None,
+        legs: list | None = None,
+    ):
         reply = super().__new__(cls, text)
         reply.images = clean_images(images or [])
         reply.places = clean_places(places or [])
+        reply.legs = clean_legs(legs or [])  # the map lines: get_route roads and, in the gateway flow, dashed connections
         reply.mode = mode if mode in MODES else None
         return reply
 
@@ -340,6 +346,15 @@ def _history_items(history) -> list[dict]:
     return items
 
 
+def _place_refusal(geo: GeoState, tool: str, args: dict) -> dict | None:
+    """Route mode: the refusal for a train or bus search or a get_route whose ends were not geocoded, else None."""
+    if tool in CITY_TOOLS:
+        return check_city_pair(geo, args)
+    if tool == "get_route":
+        return check_route_points(geo, args)
+    return None
+
+
 def _geocoded(result: dict) -> list[dict]:
     """The found places of a geocode_places result as {name, lat, lng} (checked again by clean_places later)."""
     places = result.get("places") if isinstance(result.get("places"), list) else []
@@ -382,6 +397,9 @@ async def _converse(
     failed_codes: dict[str, str] = {}  # the error code of each failed tool's latest attempt (for example "not_configured")
     extra_choice: dict | None = None  # the forced tool_choice of the one extra round, when it is scheduled
     extra_done = False
+    geo = GeoState()  # what geocode_places found (route mode checks every train, bus and road search against it)
+    roads: list[dict] = []  # successful get_route results: {inputs, points}, drawn as solid road legs
+    gateway_flow = False  # route mode: the destination has no station or bus route, so the gateway-city flow is used
     map_extra_done = False  # route mode: the separate one-time extra round that forces get_route after the places are known
 
     for round_no in range(1, MAX_TOOL_ROUNDS + 1):
@@ -461,7 +479,8 @@ async def _converse(
             for name in not_set_up:
                 logger.warning("%s is not configured on the tool server; its part of the answer was left out", name)
             # The photos travel with the text (AgentReply is a str), so the app can show them under the reply.
-            return AgentReply(f"{text}\n\n{_unchecked_note(unchecked, not_set_up)}" if unchecked else text, photos, geocoded)
+            legs = build_legs(roads, geo.journey, gateway_flow)
+            return AgentReply(f"{text}\n\n{_unchecked_note(unchecked, not_set_up)}" if unchecked else text, photos, geocoded, legs=legs)
 
         # Identical calls (same tool, same arguments) in one round run once; the extra ones are dropped.
         to_run, duplicates = _dedupe_calls(calls)
@@ -485,6 +504,9 @@ async def _converse(
             {"type": "function_call", "call_id": c.call_id, "name": c.name, "arguments": c.arguments} for c, _ in to_run
         )
         failures = 0  # how many of this round's tool calls did not return data
+        if mode == "route":
+            # Locate the places first, so the searches of the same round can be checked against them (stable sort).
+            to_run.sort(key=lambda item: item[0].name != "geocode_places")
         for call, parsed in to_run:
             args = parsed.arguments
             tool_started = time.perf_counter()
@@ -508,6 +530,14 @@ async def _converse(
                     "tool_call", "refused", round=round_no, tool=call.name,
                     argument_names=sorted(args), error_code="confirmation_required", duration_ms=_ms(tool_started),
                 )
+            elif mode == "route" and (refusal := _place_refusal(geo, call.name, args)):
+                # Only pairs where both ends were geocoded are searched (never a remote place that has no station).
+                failed_call = True
+                result = refusal
+                audit_event(
+                    "tool_call", "refused", round=round_no, tool=call.name,
+                    argument_names=sorted(args), error_code=refusal["error"], duration_ms=_ms(tool_started),
+                )
             elif mcp is not None and call.name in allowed:
                 result = await mcp.call_tool(call.name, args)
                 # A tool reports failure with ok=False and an error code of its own.
@@ -520,6 +550,10 @@ async def _converse(
                 # The places geocode_places found are sent back, so the browser can remember the last place.
                 if call.name == "geocode_places" and result.get("ok") is True:
                     geocoded.extend(_geocoded(result))
+                    geo.add(result)
+                # A found road is drawn as a solid leg (its input points tell which journey pairs it covers).
+                if call.name == "get_route" and result.get("ok") is True and result.get("found") is True and isinstance(result.get("route"), list):
+                    roads.append({"inputs": args.get("points") or [], "points": result["route"]})
                 # Photos found by the image tool are kept for the app to show under the reply (checked again later).
                 if call.name == "get_place_images" and result.get("ok") is True and result.get("found") is True:
                     photos.extend(result.get("images") if isinstance(result.get("images"), list) else [])
@@ -530,6 +564,9 @@ async def _converse(
                     "tool_call", "refused", round=round_no, tool=call.name,
                     argument_names=sorted(args), error_code="unknown_tool", duration_ms=_ms(tool_started),
                 )
+            # A destination with no station or bus city (or one that is not located) is the signal for the gateway flow.
+            if mode == "route" and is_gateway_signal(call.name, result):
+                gateway_flow = True
             failures += failed_call
             attempted.add(call.name)
             # The latest attempt decides: a tool that failed earlier and worked later counts as working.

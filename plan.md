@@ -4,7 +4,7 @@
 
 ---
 
-## Progress Remarks (last updated 2026-11-23)
+## Progress Remarks (last updated 2026-11-24)
 
 Based on reading the code, not running it. Details per file are in ARCHITECTURE.md, FILE_STRUCTURE.md and README.md.
 
@@ -17,20 +17,23 @@ Based on reading the code, not running it. Details per file are in ARCHITECTURE.
 - Health endpoints `/health` and `/ready`.
 - React frontend: chat, Leaflet map panel, voice input, Explore page.
 - Docker Compose: redis, mailpit, keycloak, backend, frontend (nginx-unprivileged serving the built app).
-- Tests written: backend 23 files, MCP 9 files, frontend 6 files (171 pass when run).
+- Saved trips and explore history for signed-in users: `/trips`, `/explore-history`, `DELETE /me/data`, MongoDB `trips` and `explore_history` (`owner_id` = token `sub`).
+- Reply buttons under plan and explore replies (Save trip, Email plan, Plan a trip to...), a guest login popup, and `POST /trips/{id}/email` to the verified address (5 per user per hour, Redis counter).
+- Gateway flow for remote destinations (map legs, dashed suggested connections).
+- Tests written: backend 26 files, MCP 9 files, frontend 7 files. Run on 2026-11-24 after the merge: backend 917 passed and 1 failed, MCP 609 passed, frontend 207 passed, `npm run build` works.
 
 ### Partial (works in part, something is missing)
 
 - Redis: container exists in compose, but chat and cache data are not stored there yet (Phase 2).
 - Explore page: the place search is a mock over 6 hardcoded places in `frontend/src/data/places.js`; no places endpoint yet.
 - Unused frontend files: `SavedTrips.jsx` and `Login.jsx` exist but nothing uses them.
-- Backend and MCP tests: cannot run on this PC (Windows Application Control blocks `pydantic_core`), so their pass status is unverified.
+- One backend test fails: `test_only_the_override_file_mounts_the_debug_logs` reads the git-ignored `docker-compose.override.yml`, which is not in this folder.
 
 ### Still in process / Planned (not created yet)
 
-- Saved trips and chat history in MongoDB (`api/trips.py`, `ChatHistory`, `TripsHistory`, `ExploreHistory`). Depends on: data model and API spec (Section 10).
+- Saved chat history in MongoDB (`ChatHistory`) and a `users` record. Depends on: the data model and API spec (Section 10). Trips and explore history already exist (above); the Saved panel in the app is not connected to them yet.
 - Guest chats in Redis with TTL; caching of weather, images and places. Depends on: Redis wiring (Phase 2).
-- Rate limiting with slowapi on Redis. Depends on: Redis wiring.
+- General rate limiting (slowapi on Redis, chat limits, daily spend cap). Depends on: Redis wiring. Only the trip email route is limited today (5 per user per hour).
 - Streaming replies (SSE) and an itinerary view. Depends on: structured itinerary output.
 - Nginx load balancer config, MCP server as its own Docker service. Depends on: Dockerfiles and the Phase 6 deploy design.
 - CI (GitHub Actions) and the golden eval set. Depends on: runnable tests and the transport decision.

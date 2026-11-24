@@ -6,6 +6,7 @@
 import ReactMarkdown from "react-markdown";
 import ImageRow, { usableImages } from "./ImageRow";
 import { hasMap, validPlaces } from "./mapData";
+import ReplyActions from "./ReplyActions.jsx";
 
 // The place name shown under the photos: only when the reply has exactly one place (photos carry no place name of their own,
 // so with several places a caption could be wrong and none is shown).
@@ -21,8 +22,9 @@ const markdownComponents = {
 
 // role: "user" | "bot" | "error"; text: the message text; images: the photos of a bot reply (shown as a row under the text,
 // with a small credit on each; see ImageRow); places: the reply's places; onShowMap: opens the map panel for this reply
-// (the "Show map" button only exists when the reply has at least one place that can be pinned).
-export default function MessageBubble({ role, text, images, places, onShowMap }) {
+// (the "Show map" button only exists when the reply has at least one place that can be pinned); mode and legs: the reply's
+// mode and map lines, which (with the places) decide the buttons under it (see ReplyActions).
+export default function MessageBubble({ role, text, images, places, mode, legs, onShowMap }) {
   if (role === "bot") {
     const hasImages = usableImages(images).length > 0;
     return (
@@ -36,6 +38,7 @@ export default function MessageBubble({ role, text, images, places, onShowMap })
             Show map
           </button>
         )}
+        <ReplyActions message={{ role, text, mode, places, legs }} />
       </div>
     );
   }

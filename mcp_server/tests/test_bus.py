@@ -140,6 +140,13 @@ async def test_unknown_city(setup):
     assert (await bus.search_buses("Bangalore", "Nowhereville", GOOD_DATE))["error"] == "city_not_found"
 
 
+async def test_unknown_city_says_which_end_failed(setup):
+    """failed_end tells the agent whether the destination (the gateway-flow signal) or the source had no city."""
+    setup(FakeClient())
+    assert (await bus.search_buses("Bangalore", "Nowhereville", GOOD_DATE))["failed_end"] == "destination"
+    assert (await bus.search_buses("Nowhereville", "Goa", GOOD_DATE))["failed_end"] == "source"
+
+
 async def test_no_buses(setup):
     setup(FakeClient(search={"status": "success", "data": {"inventories": []}}))
     assert (await bus.search_buses("Bangalore", "Goa", GOOD_DATE))["error"] == "no_buses_found"

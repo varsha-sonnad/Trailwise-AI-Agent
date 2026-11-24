@@ -71,6 +71,7 @@ export default function ChatSplit({ messages, children }) {
           <MapPanel
             places={openMessage.places}
             route={openMessage.route}
+            legs={openMessage.legs}
             images={openMessage.images}
             closing={closing}
             focusOnOpen={shouldFocusPanel({ openedByUser: open.byUser, isPhone: matches(`(max-width: ${PHONE_MAX_WIDTH}px)`) })}

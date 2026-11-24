@@ -22,6 +22,9 @@ MAX_HISTORY_MESSAGE_CHARS = 2000
 MAX_HISTORY_TOTAL_CHARS = 12000
 # Most places one reply may report back (the geocoded places of the request).
 MAX_CHAT_PLACES = 12
+# Map lines of one reply: at most this many legs, each with 2 to MAX_LEG_POINTS points.
+MAX_CHAT_LEGS = 8
+MAX_LEG_POINTS = 300
 
 
 def is_pexels_url(value: object) -> bool:
@@ -221,6 +224,43 @@ def clean_places(raw: object) -> list[dict]:
     return places
 
 
+class Leg(BaseModel):
+    """One line on the map: a driven road ("road", from get_route) or a suggested connection ("other", drawn dashed)."""
+
+    kind: Literal["road", "other"]
+    points: list[tuple[float, float]] = Field(min_length=2, max_length=MAX_LEG_POINTS)
+
+    @field_validator("points", mode="before")
+    @classmethod
+    def _points_are_real(cls, value: object) -> object:
+        """Every point is a [lat, lng] pair of real numbers in range (not text, booleans, NaN or infinity)."""
+        if not isinstance(value, (list, tuple)):
+            raise ValueError("points must be a list")
+        for point in value:
+            if not isinstance(point, (list, tuple)) or len(point) != 2:
+                raise ValueError("a point is [lat, lng]")
+            lat, lng = _real_number(point[0]), _real_number(point[1])
+            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+                raise ValueError("coordinates out of range")
+        return value
+
+
+def clean_legs(raw: object) -> list[dict]:
+    """The valid legs of a list as plain dicts {kind, points}: invalid ones dropped, at most MAX_CHAT_LEGS."""
+    if not isinstance(raw, (list, tuple)):
+        return []
+    legs = []
+    for item in raw:
+        try:
+            leg = Leg.model_validate(item)
+        except ValidationError:
+            continue
+        legs.append({"kind": leg.kind, "points": [list(p) for p in leg.points]})
+        if len(legs) >= MAX_CHAT_LEGS:
+            break
+    return legs
+
+
 class ChatResponse(BaseModel):
     """The body returned by POST /chat: the agent's reply, the photos the app shows under it (often none), and what the
     browser needs to remember for the next request: the mode used and the geocoded places of this reply."""
@@ -229,3 +269,7 @@ class ChatResponse(BaseModel):
     images: list[ChatImage] = Field(default_factory=list)
     mode: str | None = None
     places: list[LastPlace] = Field(default_factory=list)
+    # The map lines of this reply (road legs solid, other suggested connections dashed); empty when there are none.
+    legs: list[Leg] = Field(default_factory=list)
+    # Only for signed-in users when an explore entry was attempted: true = saved, false = the save failed. None otherwise.
+    saved: bool | None = None

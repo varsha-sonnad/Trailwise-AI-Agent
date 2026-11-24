@@ -1,15 +1,18 @@
 # me.py: the /me routes. GET /me returns who the signed-in user is, read from the verified Keycloak token.
-# GET and PUT /me/preferences read and save that user's preferences in MongoDB. The user always comes from the
-# verified token, never from the request body. Guests and anonymous callers get a 401.
+# GET and PUT /me/preferences read and save that user's preferences in MongoDB. DELETE /me/data removes the user's
+# saved trips and explore history. The user always comes from the verified token, never from the request body.
+# Guests and anonymous callers get a 401.
 
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from app.api.trips import db_errors
 from app.core import preferences as prefs_store
 from app.core.auth import Principal, require_user
 from app.core.mongo import get_db
 from app.models.preferences import Preferences
+from app.services import trips_store
 
 logger = logging.getLogger(__name__)
 
@@ -41,3 +44,10 @@ async def put_preferences(body: Preferences, user: Principal = Depends(require_u
         logger.error("could not save preferences (%s)", type(exc).__name__)
         raise HTTPException(status_code=503, detail="Preferences are not available right now.") from exc
     return body
+
+
+@router.delete("/me/data")
+async def delete_my_data(user: Principal = Depends(require_user), db=Depends(get_db)) -> dict:
+    """Delete everything stored for the signed-in user (trips and explore history). Only their own records, by token sub."""
+    with db_errors():
+        return await trips_store.delete_all_for_owner(db, user.id)

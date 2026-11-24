@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Disclaimer from "./components/Disclaimer";
 import NavBar from "./components/NavBar";
+import { ReplyActionsContext } from "./components/ReplyActions.jsx";
 import { useAuth } from "./hooks/useAuth";
 import { useChat } from "./hooks/useChat";
 import { usePreferences } from "./hooks/usePreferences";
@@ -117,6 +118,8 @@ export default function App() {
   }
 
   return (
+    // The buttons under replies need to know who is signed in, how to log in and how to send a message.
+    <ReplyActionsContext.Provider value={{ user, onLogin: login, onSend: send, pending }}>
     <div className="app">
       {/* The app page has its own sidebar, so the top bar is only for the public site. */}
       {!isApp && (
@@ -137,5 +140,6 @@ export default function App() {
 
       <Disclaimer />
     </div>
+    </ReplyActionsContext.Provider>
   );
 }

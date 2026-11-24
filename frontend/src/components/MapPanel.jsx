@@ -10,7 +10,7 @@ import { closeOnOutsidePress, isCloseKey } from "./mapData";
 
 // places, route, images: the lists of the reply the panel was opened for; onClose: called for every way of closing;
 // closing: true while it shrinks away; focusOnOpen: whether it takes keyboard focus when it opens (see shouldFocusPanel).
-export default function MapPanel({ places, route, images, onClose, closing = false, focusOnOpen = true }) {
+export default function MapPanel({ places, route, legs, images, onClose, closing = false, focusOnOpen = true }) {
   const closeButton = useRef(null);
   // The latest onClose, so the keyboard listener below is set up once and not again on every render.
   const closeRef = useRef(onClose);
@@ -41,7 +41,7 @@ export default function MapPanel({ places, route, images, onClose, closing = fal
             &times;
           </button>
         </header>
-        <PlaceMap places={places} route={route} images={images} />
+        <PlaceMap places={places} route={route} legs={legs} images={images} />
       </aside>
     </div>
   );

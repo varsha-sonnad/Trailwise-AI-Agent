@@ -319,8 +319,11 @@ async def search_buses(source_city: str, destination_city: str, journey_date: st
                     _city_id(client, args.destination_city, api_key),
                     return_exceptions=True,
                 )
-                for lookup in lookups:
+                for end, lookup in zip(("source", "destination"), lookups):
                     if isinstance(lookup, BaseException):
+                        # Say which end had no city (a missing destination is the signal for the gateway flow).
+                        if isinstance(lookup, _Failure) and lookup.error.get("error") == "city_not_found":
+                            lookup.error["failed_end"] = end
                         raise lookup  # a _Failure is handled below; anything else is a real bug
                 from_id, to_id = lookups
                 data = await _get(

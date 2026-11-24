@@ -324,16 +324,16 @@ describe("api/chat.js passes places and route on", () => {
 describe("the message keeps places and route", () => {
   test("useChat stores them on the bot message", () => {
     const src = code("src", "hooks", "useChat.js");
-    assert.match(src, /const \{ reply, images, mode, places, route \} = await sendMessage/);
-    assert.match(src, /addMessage\("bot", reply, images, places, route\)/);
-    assert.match(src, /\{ id: nextId\.current\+\+, role, text, images, places, route \}/);
+    assert.match(src, /const \{ reply, images, mode, places, route, legs \} = await sendMessage/);
+    assert.match(src, /addMessage\("bot", reply, images, places, route, legs, mode\)/);
+    assert.match(src, /\{ id: nextId\.current\+\+, role, text, images, places, route, legs, mode \}/);
   });
   test("ChatSplit owns the panel: auto-open once per message, the panel as a sibling of the chat, shrinking away on close", () => {
     const src = code("src", "components", "ChatSplit.jsx");
     assert.match(src, /shouldAutoOpen\(messages, autoOpened\)/);
     assert.match(src, /new WeakSet\(\)/);
     assert.match(src, /<div className="chat-col">\{children\}<\/div>/); // the chat is always rendered in the same place
-    assert.match(src, /<MapPanel\s+places=\{openMessage\.places\}\s+route=\{openMessage\.route\}\s+images=\{openMessage\.images\}/);
+    assert.match(src, /<MapPanel\s+places=\{openMessage\.places\}\s+route=\{openMessage\.route\}\s+legs=\{openMessage\.legs\}\s+images=\{openMessage\.images\}/);
     assert.match(src, /messages\.includes\(open\.message\)/); // after "New chat" the panel is gone
     assert.match(src, /closeDelay\(matches\("\(prefers-reduced-motion: reduce\)"\)\)/);
     assert.match(src, /if \(timer\.current\) return; \/\/ already closing/);
@@ -449,5 +449,44 @@ describe("the styles and settings", () => {
     const pkg = JSON.parse(source("package.json"));
     assert.equal(pkg.dependencies.leaflet, "1.9.4");
     assert.deepEqual(Object.keys(pkg.dependencies).sort(), ["keycloak-js", "leaflet", "react", "react-dom", "react-markdown"]);
+  });
+});
+
+// ---------------------------------------------------------------- legs: solid roads and dashed suggested connections
+describe("legs (solid road lines, dashed suggested connections)", () => {
+  const road = { kind: "road", points: [[30.0, 78.0], [30.5, 78.5], [30.9, 79.0]] };
+  const other = { kind: "other", points: [[30.9, 79.0], [30.7, 79.06]] };
+  test("validLegs keeps only the two known kinds with at least two good points", () => {
+    assert.deepEqual(data.validLegs([road, other]), [road, other]);
+    assert.deepEqual(data.validLegs([{ kind: "flight", points: road.points }, { kind: "road", points: [[1, 1]] }, null, "x"]), []);
+    assert.deepEqual(data.validLegs([{ kind: "other", points: [[30, 78], ["x", 1], [999, 1], [31, 79]] }]), [{ kind: "other", points: [[30, 78], [31, 79]] }]);
+    for (const none of [undefined, null, {}, "abc", 5]) assert.deepEqual(data.validLegs(none), []);
+    assert.equal(data.validLegs(Array.from({ length: 20 }, () => road)).length, data.MAX_LEGS);
+  });
+  test("the map view is widened to fit every leg", () => {
+    const view = data.mapView([{ name: "A", lat: 30.0, lng: 78.0 }], [], [other]);
+    assert.equal(view.kind, "bounds");
+    assert.deepEqual(view.bounds, [[30.0, 78.0], [30.9, 79.06]]);
+  });
+  test("the caption appears only when there are dashed legs, and says to verify before travel", () => {
+    const withOther = renderToStaticMarkup(h(PlaceMap, { places: [VARANASI], route: [], legs: [road, other], images: [] }));
+    assert.match(withOther, /suggested connections, verify before travel/);
+    assert.doesNotMatch(renderToStaticMarkup(h(PlaceMap, { places: [VARANASI], route: [], legs: [road], images: [] })), /verify before travel/);
+    assert.doesNotMatch(renderToStaticMarkup(h(PlaceMap, { places: [VARANASI], route: [], images: [] })), /verify before travel/);
+  });
+  test("PlaceMap draws road legs solid and the others dashed", () => {
+    const src = code("src", "components", "PlaceMap.jsx");
+    assert.match(src, /leg\.kind === "road"/);
+    assert.match(src, /dashArray: "8 8"/);
+  });
+  test("api/chat.js passes legs on, and anything else becomes an empty list", async () => {
+    const realFetch = globalThis.fetch;
+    const ask = async (body) => {
+      globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => body });
+      try { return await chatApi.sendMessage("hi", { history: [], lastMode: null, lastPlace: null }); } finally { globalThis.fetch = realFetch; }
+    };
+    assert.deepEqual((await ask({ reply: "Hi", legs: [road, other] })).legs, [road, other]);
+    assert.deepEqual((await ask({ reply: "Hi" })).legs, []);
+    assert.deepEqual((await ask({ reply: "Hi", legs: "x" })).legs, []);
   });
 });

@@ -233,7 +233,7 @@ describe("sendMessage sends { message, history, last_mode, last_place }", () => 
       const result = await chatApi.sendMessage("And the weather?", { history, lastMode: "explore", lastPlace: KEDARNATH });
       assert.deepEqual(Object.keys(sent.body).sort(), ["history", "last_mode", "last_place", "message"]);
       assert.deepEqual(sent.body, { message: "And the weather?", history, last_mode: "explore", last_place: KEDARNATH });
-      assert.deepEqual(result, { reply: "Cold at night.", images: [], mode: "explore", places: [KEDARNATH], route: [] });
+      assert.deepEqual(result, { reply: "Cold at night.", images: [], mode: "explore", places: [KEDARNATH], route: [], legs: [] });
     } finally {
       restore();
     }
