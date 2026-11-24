@@ -1,5 +1,5 @@
 // AppHome.jsx: the app page (route /app), open to guests and to signed-in users. A sidebar (Home, Chats, Saved,
-// Explore) and a main area. Home is a dashboard (HomeDashboard: place cards or "continue your trip"), and Chats is the
+// Explore, Preferences) and a main area. Home is a dashboard (HomeDashboard: place cards or "continue your trip"), and Chats is the
 // chat itself: the conversation and a chat bar with a mic and a send button. Clicking a card or chip on Home opens
 // Chats with a message pre-filled (not sent). UI only: the chat uses the shared conversation held in App.jsx (the
 // same POST /chat as the rest of the app). A guest sees a "Log in" button where a signed-in user sees "Log out", and
@@ -14,15 +14,17 @@ import ChatSplit from "../components/ChatSplit";
 import HomeDashboard from "../components/HomeDashboard";
 import MessageList from "../components/MessageList";
 import { getReturningUserData } from "../data/mockReturningUser";
-import { VOICE_LANGUAGES, useVoice } from "../hooks/useVoice";
+import { VOICE_LANGUAGES, useVoice, useVoiceLanguage } from "../hooks/useVoice";
 import Explore from "./Explore";
+import Preferences from "./Preferences";
 
-// The only sidebar items, in order. "id" picks the panel shown in the main area.
+// The sidebar items, in order. "id" picks the panel shown in the main area.
 const SECTIONS = [
   { id: "home", label: "Home" },
   { id: "chats", label: "Chats" },
   { id: "saved", label: "Saved" },
   { id: "explore", label: "Explore" },
+  { id: "preferences", label: "Preferences" },
 ];
 
 // Small line icons drawn inline (no icon library). Each entry is the SVG shapes inside a 24x24 box.
@@ -34,6 +36,13 @@ const ICONS = {
     <>
       <circle cx="12" cy="12" r="9" />
       <path d="M15.5 8.5l-2 5-5 2 2-5z" />
+    </>
+  ),
+  preferences: (
+    <>
+      <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
+      <circle cx="16" cy="7" r="2" />
+      <circle cx="8" cy="17" r="2" />
     </>
   ),
   mic: (
@@ -58,12 +67,13 @@ function Icon({ name }) {
 // onSend(text): send a message. disabled: true while a reply is pending.
 // initialText: text to start with (from the public home page's search box, or a Home card or chip); the cursor is put in the box when set.
 // onTextTaken(): called once the box has taken initialText, so the page can forget it.
-function ChatBar({ onSend, disabled, initialText, onTextTaken }) {
+// replyLanguage: the saved reply language; the voice language picker starts on it.
+function ChatBar({ onSend, disabled, initialText, onTextTaken, replyLanguage }) {
   const [text, setText] = useState(initialText);
   useEffect(() => {
     if (initialText) onTextTaken();
   }, [initialText, onTextTaken]);
-  const [lang, setLang] = useState(VOICE_LANGUAGES[0].code);
+  const [lang, setLang] = useVoiceLanguage(replyLanguage);
   // Speech recognition (the browser does it). Spoken text is added to the box for the user to check.
   const voice = useVoice({
     lang,
@@ -127,8 +137,8 @@ function ChatBar({ onSend, disabled, initialText, onTextTaken }) {
 
 // user: the signed-in user ({ name }), or null for a guest; messages / pending / onSend: the shared conversation from
 // App.jsx; onNewChat(): clear the conversation and its memory; onLogin(): go to the Keycloak login page; onLogout(): sign out; draft: text from the public home page's search box,
-// which pre-fills the chat input once (onDraftUsed() then clears it). Nothing here talks to the backend or Keycloak.
-export default function AppHome({ user, messages, pending, onSend, onNewChat, onLogin, onLogout, draft, onDraftUsed }) {
+// which pre-fills the chat input once (onDraftUsed() then clears it); prefs: the preferences state from usePreferences (held in App.jsx). Nothing here talks to the backend or Keycloak.
+export default function AppHome({ user, prefs, messages, pending, onSend, onNewChat, onLogin, onLogout, draft, onDraftUsed }) {
   // Which panel the sidebar has selected. Text from the public home page's search box goes straight to Chats.
   const [section, setSection] = useState(draft ? "chats" : "home");
   // The text to pre-fill in the chat bar, taken once when Chats opens (the chat bar clears it after using it, so
@@ -195,7 +205,7 @@ export default function AppHome({ user, messages, pending, onSend, onNewChat, on
           )}
         </header>
 
-        {section === "home" && <HomeDashboard user={user} returning={returning} onPrompt={openChatWith} />}
+        {section === "home" && <HomeDashboard user={user} returning={returning} onPrompt={openChatWith} prefs={prefs.saved} />}
 
         {section === "chats" && (
           <ChatSplit messages={messages}>
@@ -210,11 +220,13 @@ export default function AppHome({ user, messages, pending, onSend, onNewChat, on
                 <p className="greeting-sub">Tell me where you want to go and I will help you plan it.</p>
               </div>
             )}
-            <ChatBar onSend={onSend} disabled={pending} initialText={prefill} onTextTaken={() => setPrefill("")} />
+            <ChatBar onSend={onSend} disabled={pending} initialText={prefill} onTextTaken={() => setPrefill("")} replyLanguage={prefs.saved.reply_language} />
           </ChatSplit>
         )}
 
-        {section === "explore" && <Explore onPrompt={openChatWith} />}
+        {section === "explore" && <Explore onPrompt={openChatWith} prefs={prefs.saved} />}
+
+        {section === "preferences" && <Preferences user={user} prefs={prefs} />}
 
         {/* Saved has no data yet. A guest who opens it is asked to log in. */}
         {section === "saved" && (

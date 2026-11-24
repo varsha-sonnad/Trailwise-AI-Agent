@@ -10,6 +10,7 @@ import NavBar from "./components/NavBar";
 import { ReplyActionsContext } from "./components/ReplyActions.jsx";
 import { useAuth } from "./hooks/useAuth";
 import { useChat } from "./hooks/useChat";
+import { usePreferences } from "./hooks/usePreferences";
 import AppHome from "./pages/AppHome";
 import Chat from "./pages/Chat";
 import Home from "./pages/Home";
@@ -19,10 +20,14 @@ export default function App() {
   const [path, setPath] = useState(window.location.pathname);
   // Which page is showing under "/": "home" or "chat" (the guest chat).
   const [page, setPage] = useState("home");
-  // The conversation, shared by the Home hero input, the Chat page and the logged-in page.
-  const { messages, pending, send, reset } = useChat();
   // Who is signed in (a Keycloak user, or null for a guest); ready = the session check has finished.
   const { user, ready, login, logout } = useAuth();
+  // Saved preferences (account for a signed-in user, this browser for a guest). Held here so that, right after login, the
+  // browser's choices are copied to an empty account whichever page opens, and so the chat can use them.
+  const prefs = usePreferences(Boolean(user));
+  // The conversation, shared by the Home hero input, the Chat page and the logged-in page. Each message carries the saved
+  // reply language, budget style and travel mode.
+  const { messages, pending, send, reset } = useChat(prefs.saved);
   // Text typed in the hero search box, handed to the chat input on /app (it is only pre-filled, never sent).
   // It lives in React state only: nothing is stored in the browser.
   const [draft, setDraft] = useState("");
@@ -85,6 +90,7 @@ export default function App() {
     content = ready ? (
       <AppHome
         user={user}
+        prefs={prefs}
         messages={messages}
         pending={pending}
         onSend={send}
@@ -108,7 +114,7 @@ export default function App() {
       />
     );
   } else {
-    content = <Chat messages={messages} pending={pending} onSend={send} />;
+    content = <Chat messages={messages} pending={pending} onSend={send} replyLanguage={prefs.saved.reply_language} />;
   }
 
   return (

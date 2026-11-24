@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from app.agent.modes import MODES
 from app.config import get_settings
+from app.models.preferences import Budget, ReplyLanguage, TravelMode
 
 # Most photos one reply may carry (one place has up to 3).
 MAX_CHAT_IMAGES = 6
@@ -104,11 +105,32 @@ class LastPlace(BaseModel):
         return self
 
 
+class ChatPreferences(BaseModel):
+    """The saved preferences that may travel with a chat request: only these three fields, only the fixed values.
+
+    The browser sends them (a guest's live only there). They turn into one short fixed-template line for the model
+    (agent/modes.py preferences_line), so free text can never get in: anything else is refused with 422.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    reply_language: ReplyLanguage | None = None
+    budget: Budget | None = None
+    travel_mode: list[TravelMode] = Field(default_factory=list)
+
+    @field_validator("travel_mode")
+    @classmethod
+    def _no_repeats(cls, values: list) -> list:
+        """Drop repeated travel modes, keeping the first one's order."""
+        return list(dict.fromkeys(values))
+
+
 class ChatRequest(BaseModel):
     """The body of POST /chat: one user message, plus the per-session memory the browser sends along.
 
     history: up to 10 earlier messages (2000 characters each, 12000 together), oldest first. last_mode: the mode of the
-    previous reply, from the fixed list. last_place: the last geocoded place with its coordinates. Anything else in the
+    previous reply, from the fixed list. last_place: the last geocoded place with its coordinates. preferences: the saved
+    reply language, budget style and travel mode (fixed values only). Anything else in the
     body, or any value outside these rules, is refused with 422.
     """
 
@@ -120,6 +142,7 @@ class ChatRequest(BaseModel):
     history: list[HistoryMessage] = Field(default_factory=list, max_length=MAX_HISTORY_MESSAGES)
     last_mode: str | None = None
     last_place: LastPlace | None = None
+    preferences: ChatPreferences | None = None
 
     @field_validator("last_mode", mode="before")
     @classmethod

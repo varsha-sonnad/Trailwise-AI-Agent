@@ -1,0 +1,10 @@
+# .gitignore for the frontend: keeps these safe even if the folder is copied or split into its own repo.
+# (The root .gitignore already covers them while it is part of this project.)
+node_modules/
+dist/
+coverage/
+.vite/
+# Local env files hold real values; frontend/.env.example (fake values) stays tracked
+*.local
+.env.local
+.env.*.local

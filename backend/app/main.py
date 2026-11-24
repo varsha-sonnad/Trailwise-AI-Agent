@@ -16,7 +16,8 @@ from app.api.trips import router as trips_router
 from app.config import get_settings
 from app.core.debug_log import warn_if_debug_logging
 from app.core.mongo import create_client, ping
-from app.services.trips_store import ensure_indexes
+from app.core.preferences import ensure_indexes as ensure_preferences_indexes
+from app.services.trips_store import ensure_indexes as ensure_trips_indexes
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +32,11 @@ async def lifespan(app: FastAPI):
     if not await ping(client):
         logger.warning("MongoDB did not answer the startup ping; /ready will return 503 until it does")
     else:
-        # Create the (owner_id, created_at) indexes; a failure logs the index name only and startup carries on.
-        await ensure_indexes(client[get_settings().mongo_db])
+        db = client[get_settings().mongo_db]
+        # Unique index on Preferences.sub; a failure is only logged.
+        await ensure_preferences_indexes(db)
+        # Create the (owner_id, created_at) trips and explore indexes; a failure logs the index name only and startup carries on.
+        await ensure_trips_indexes(db)
     try:
         yield
     finally:
@@ -50,7 +54,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,  # needed later for httpOnly cookie login
-        allow_methods=["GET", "POST", "DELETE"],
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["*"],
     )
 
@@ -67,7 +71,7 @@ def create_app() -> FastAPI:
 
     # Chat endpoint: POST /chat.
     app.include_router(chat_router)
-    # Who am I: GET /me (needs a Keycloak token).
+    # Who am I and saved preferences: GET /me, GET and PUT /me/preferences (need a Keycloak token).
     app.include_router(me_router)
     # Saved trips and explore history: /trips, /explore-history (signed-in users only).
     app.include_router(trips_router)

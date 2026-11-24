@@ -3,7 +3,7 @@
 // with a "Recently explored" row (returning user). Every click only hands a message to onPrompt, which opens Chat with
 // that message pre-filled (it is never sent for the user). No timings or prices appear on any card.
 
-import { PLACES, QUICK_STARTS, placeById, tripPrompt } from "../data/places";
+import { PLACES, QUICK_STARTS, placeById, rankPlaces, tripPrompt } from "../data/places";
 
 // "Good morning", "Good afternoon" or "Good evening" from the local time.
 function greetingFor(date) {
@@ -29,7 +29,8 @@ function PlaceCard({ place, onPick, compact }) {
 
 // user: the signed-in user ({ name }) or null for a guest. returning: { lastTrip: { placeId, name }, recentlyExplored:
 // [place ids] } for a returning user, or null for a guest or new user. onPrompt(text): open Chat with this message.
-export default function HomeDashboard({ user, returning, onPrompt }) {
+// prefs: the saved preferences; they only reorder the place cards (matching interests first, none hidden).
+export default function HomeDashboard({ user, returning, onPrompt, prefs }) {
   const firstName = user ? user.name.split(" ")[0] : "";
 
   return (
@@ -76,7 +77,7 @@ export default function HomeDashboard({ user, returning, onPrompt }) {
         <>
           <h3>Start your first trip</h3>
           <div className="place-grid">
-            {PLACES.map((place) => (
+            {rankPlaces(PLACES, prefs).map((place) => (
               <PlaceCard key={place.id} place={place} onPick={() => onPrompt(tripPrompt(place))} />
             ))}
           </div>

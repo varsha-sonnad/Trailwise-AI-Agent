@@ -12,6 +12,20 @@ export const VOICE_LANGUAGES = [
   { code: "kn-IN", label: "ಕನ್ನಡ" },
 ];
 
+// The voice code for a saved reply language ("en", "hi", "kn"); English when none is saved or it is unknown.
+export function voiceCodeFor(replyLanguage) {
+  const match = VOICE_LANGUAGES.find((l) => l.code.split("-")[0] === replyLanguage);
+  return (match || VOICE_LANGUAGES[0]).code;
+}
+
+// The language picker's state, started from the saved reply language. The user can still change it; it follows the saved
+// language again whenever that changes.
+export function useVoiceLanguage(replyLanguage) {
+  const [lang, setLang] = useState(() => voiceCodeFor(replyLanguage));
+  useEffect(() => setLang(voiceCodeFor(replyLanguage)), [replyLanguage]);
+  return [lang, setLang];
+}
+
 // The browser's recognition class, under its standard or its prefixed name (undefined if unsupported).
 const Recognition = typeof window !== "undefined" ? window.SpeechRecognition || window.webkitSpeechRecognition : undefined;
 

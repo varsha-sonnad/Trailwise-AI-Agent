@@ -5,8 +5,8 @@ import { useState } from "react";
 import { MAX_MESSAGE_CHARS } from "../api/chat";
 import VoiceButton from "./VoiceButton";
 
-// onSend(text): called with the message. disabled: true while a reply is pending.
-export default function ChatInput({ onSend, disabled }) {
+// onSend(text): called with the message. disabled: true while a reply is pending. replyLanguage: the saved reply language (voice).
+export default function ChatInput({ onSend, disabled, replyLanguage }) {
   const [text, setText] = useState("");
 
   // Send the message and clear the box.
@@ -47,7 +47,7 @@ export default function ChatInput({ onSend, disabled }) {
           Send
         </button>
       </div>
-      <VoiceButton onText={addVoiceText} disabled={disabled} />
+      <VoiceButton onText={addVoiceText} disabled={disabled} replyLanguage={replyLanguage} />
     </form>
   );
 }

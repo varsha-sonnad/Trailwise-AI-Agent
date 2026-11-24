@@ -1,0 +1,8 @@
+# .gitignore for the MCP server: keeps these safe even if the folder is copied or split into its own repo.
+# (The root .gitignore already covers them while it is part of this project.)
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# Real settings and keys live in a .env file, never in git
+.env

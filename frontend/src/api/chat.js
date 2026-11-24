@@ -2,6 +2,7 @@
 // The backend runs the OpenAI agent and returns {reply, images, mode, places}. Failures become an ApiError with a friendly message.
 
 import { postJson } from "./client";
+import { chatPreferences } from "./preferences";
 
 // Longest message the backend accepts (matches max_message_chars in backend/app/config.py).
 export const MAX_MESSAGE_CHARS = 1000;
@@ -21,6 +22,7 @@ function describeChatError(status) {
 // { reply: the text, images: the photos to show under it, mode: the mode it was written in, places: the places it geocoded,
 // route: the route line for the map when there is one }.
 // memory = { history, lastMode, lastPlace } (see hooks/chatMemory.js); the backend stores none of it, so it is sent every time.
+// memory.preferences (the saved preferences, optional): only the reply language, budget style and travel mode that are set go along.
 // images and places are always lists (empty when the reply has none, or when an older backend does not send the field).
 export async function sendMessage(message, memory = {}) {
   const body = {
@@ -29,6 +31,8 @@ export async function sendMessage(message, memory = {}) {
     last_mode: memory.lastMode ?? null,
     last_place: memory.lastPlace ?? null,
   };
+  const preferences = chatPreferences(memory.preferences);
+  if (preferences) body.preferences = preferences; // left out entirely when nothing is set
   const data = await postJson("/chat", body, describeChatError);
   return {
     reply: data.reply,

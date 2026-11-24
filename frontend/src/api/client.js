@@ -1,5 +1,5 @@
 // client.js: the one place that makes HTTP calls to the Trailwise backend.
-// Every call goes through postJson, so errors look the same everywhere and no key is ever involved
+// Every call goes through requestJson (via postJson, putJson or getJson), so errors look the same everywhere and no key is ever involved
 // (the frontend holds no API keys; the backend does all the external calls).
 
 // Where the backend runs. Set VITE_API_URL in frontend/.env.local to change it (see .env.example).
@@ -21,15 +21,15 @@ export class ApiError extends Error {
   }
 }
 
-// Send a JSON POST to the backend and return the parsed JSON reply.
+// Send a JSON request (POST, PUT) or a GET (no body) to the backend and return the parsed JSON reply.
 // describeError turns an HTTP status into a short message the user can understand.
-export async function postJson(path, body, describeError) {
+async function requestJson(method, path, body, describeError) {
   let response;
   try {
     response = await fetch(`${API_URL}${path}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-      body: JSON.stringify(body),
+      method,
+      headers: { ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...(await authHeaders()) },
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
     // fetch throws a TypeError when the server cannot be reached at all.
@@ -40,3 +40,8 @@ export async function postJson(path, body, describeError) {
   }
   return response.json();
 }
+
+// The three verbs the app uses.
+export const postJson = (path, body, describeError) => requestJson("POST", path, body, describeError);
+export const putJson = (path, body, describeError) => requestJson("PUT", path, body, describeError);
+export const getJson = (path, describeError) => requestJson("GET", path, undefined, describeError);

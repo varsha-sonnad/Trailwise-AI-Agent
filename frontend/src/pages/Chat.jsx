@@ -4,13 +4,13 @@
 import ChatSplit from "../components/ChatSplit";
 import ChatWindow from "../components/ChatWindow";
 
-// messages / pending / onSend come from useChat in App.jsx.
-export default function Chat({ messages, pending, onSend }) {
+// messages / pending / onSend come from useChat in App.jsx; replyLanguage is the saved reply language (it sets the voice language).
+export default function Chat({ messages, pending, onSend, replyLanguage }) {
   return (
     // The map panel (when a reply has places) becomes a second column next to the chat page.
     <ChatSplit messages={messages}>
       <div className="chat-page">
-        <ChatWindow messages={messages} pending={pending} onSend={onSend} />
+        <ChatWindow messages={messages} pending={pending} onSend={onSend} replyLanguage={replyLanguage} />
       </div>
     </ChatSplit>
   );
